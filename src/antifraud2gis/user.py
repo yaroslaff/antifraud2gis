@@ -14,13 +14,18 @@ import lmdb
 import tempfile
 import os
 
+from sqlalchemy import Column, String, Text, ForeignKey, Boolean
+from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
+
 from .db import db
 from .const import WSS_THRESHOLD, LOAD_NREVIEWS, SLEEPTIME, LMDB_MAP_SIZE
 from .settings import settings
 from .statistics import statistics
 from .session import session
-from .review import Review
+# from .review import Review
 from .logger import logger
+from .base import Base
+from .dbsession import get_db_session
 
 THRESHOLD_NR=3
 THRESHOLD_TS=1.5
@@ -41,14 +46,151 @@ def retry(max_attempts=3, delay=1):
         return wrapper
     return decorator
 
+class User(Base):
+    __tablename__ = "user"
+    
+    public_id: Mapped[str] = mapped_column(String, primary_key=True)
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
-class User:
-    def __init__(self, public_id):
+    reviews: Mapped[list["Review"]] = relationship(back_populates="user")
+
+    def __init__(self, public_id: str, name: str, private: bool = False ):
 
         self.public_id = public_id
+        self.name = name
+        self.private = private
         self.reviews_path = settings.user_storage / (public_id + '-reviews.json.gz')
         self._reviews = list()
-        self.load(local_only=True)
+        # self.load(local_only=True)
+
+    @classmethod
+    def get_or_fetch(cls, public_id: str, dbsession=None) -> "User":
+        dbsession = dbsession or get_db_session()
+
+        # Try to load from DB
+        user = dbsession.get(cls, public_id)
+        if user:
+            return user
+        
+
+        u = cls.fetch(public_id, dbsession=dbsession)
+        print("u:", u)
+        
+        
+        # Try to load from DB AGAIN
+        user = dbsession.get(cls, public_id)
+        return user
+        
+
+
+        # Fetch JSON data from URL
+        resp = requests.get(json_url)
+        resp.raise_for_status()
+        data = resp.json()
+
+        # Assume JSON contains at least {"public_id": ..., "name": ...}
+        user = cls(public_id=data["public_id"], name=data["name"])
+        dbsession.add(user)
+        dbsession.commit()
+        return user
+
+    @classmethod
+    def fetch(cls, public_id: str, dbsession = None) -> 'User':
+
+        from .company import Company
+        from .review import Review
+
+        url = f'https://api.auth.2gis.com/public-profile/1.1/user/{public_id}/content/feed?page_size=20'
+
+        dbsession = dbsession or get_db_session()
+
+        page = 0
+
+        _user = None
+
+        _reviews = list()
+
+        while True:
+            logger.debug(f"Loading user reviews p{page} for user {public_id} from {url}")
+            time.sleep(SLEEPTIME)
+            r = session.get(url)
+            if r.status_code == 403:
+                # print("New private profile", self.public_id)
+                # db.add_private_profile(self.public_id)
+                print(r)
+                print(r.status_code)
+                raise NotImplementedError
+
+            elif r.status_code in [400, 500]:
+                logger.warning(f"user {public_id} reviews error {r.status_code} url: {url}")
+                break
+            else:
+                r.raise_for_status()
+          
+            data = r.json()
+
+            for el in data['content_feed']:
+                try:
+                    review_data = el['review']
+
+                    print_json(data=review_data)
+                    if _user is None:
+                        # Make user record
+                        _user = User(public_id=review_data['user']['public_id'], name=review_data['user']['name'], private=False)
+                        dbsession.add(_user)
+                        dbsession.commit()
+                    
+
+                    # save company (if needed)
+                    obj = review_data['object']
+                    _company = dbsession.get(Company, obj['id'])
+                    if _company is None:
+                        print("company Not found")
+                        city, address = obj['address'].split(',', 1)
+                        _company = Company(object_id=obj['id'], title=obj['name'], city=city.strip(), address=address.strip())
+                        dbsession.add(_company)
+                        dbsession.commit()
+                    
+                    # save review
+                    _review = Review(
+                        id=review_data['id'],
+                        user=_user,
+                        company=_company,
+                        provider=review_data['provider'],
+                        rating=review_data['rating']
+                    )
+                    dbsession.add(_review)
+                    dbsession.commit()
+
+
+
+
+                except KeyError:
+                    continue
+                _reviews.append(review_data)
+
+            try:
+                token = data['next_page_token']                
+            except KeyError:
+                # logger.debug("no token in response")
+                break
+
+            # logger.debug(f"token: {token}")
+            
+
+            # Next Page
+            parsed_url = urlparse(url)
+            query_params = parse_qs(parsed_url.query)
+            query_params['page_token'] = token
+            new_query = urlencode(query_params, doseq=True)
+            url = urlunparse(parsed_url._replace(query=new_query))
+            page+=1
+
+        statistics.total_users_loaded_network += 1
+        statistics.total_users_loaded += 1
+        return _user
+
 
     def lmdb_load(self, local_only=False):
         # prepare data structures
@@ -158,6 +300,7 @@ class User:
             # private profile
             return None
         try:
+            from .review import Review
             r = Review(sorted(self._reviews, key=lambda r: r['created'])[0])
         except KeyError:
             print_json(data=self._reviews)
@@ -185,15 +328,16 @@ class User:
                     return r._data['object']
 
 
-    def reviews(self):
+    def get_reviews(self):
         self.load()
+        from .review import Review
         # reviews are sorted by date_edited desc, not by date_created, we need to re-sort
         for r in sorted(self._reviews, key=lambda r: r['created']):
             if r['oid'] in settings.skip_oids:
-                continue
+                continue            
             yield Review(r, user=self)
 
-    def review_for(self, oid: str) -> Review:
+    def review_for(self, oid: str) -> 'Review':
         for r in self.reviews():
             if r.oid == oid:
                 return r
@@ -280,7 +424,7 @@ class User:
         return f"https://2gis.ru/af2gis/user/{self.public_id}"
 
     @property
-    def name(self):
+    def unused_name(self):
         if self._reviews:
 
             try:
@@ -366,7 +510,7 @@ class User:
 
 
     def __repr__(self):
-        return f'User({self.name} {self.url} rev: {len(self._reviews) if self._reviews else "not loaded"})'
+        return f'User({self.name} {self.url})'
 
 
 

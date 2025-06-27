@@ -14,9 +14,11 @@ from rich.table import Table
 import redis
 import gzip
 import lmdb
-
+import os
 
 from pathlib import Path
+
+from sqlalchemy import create_engine
 
 from ..company import Company, CompanyList
 from ..user import User
@@ -33,6 +35,7 @@ from ..aliases import resolve_alias
 # from ..search import search
 from ..companydb import dbsearch
 from ..aliases import aliases
+from ..base import Base
 
 # CLI
 from .summary import printsummary
@@ -59,7 +62,7 @@ def get_args():
     aa.parse()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases'])
+    parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases', 'createdb'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--sleep", type=float, default=None, help='sleep N.M seconds after each processed company')
     parser.add_argument("--fmt", "-f", default="normal", choices=['brief', 'normal', 'full'])
@@ -86,6 +89,20 @@ def get_args():
 def any_filter(args):
     return args.company or args.name or args.town or args.detection or args.report or args.noreport
 
+def createdb():
+    print("CREATE db", settings.dburl)
+
+    if False:
+        for table_name, table_obj in Base.metadata.tables.items():
+            print(table_name)
+            print(table_obj.columns.keys())
+            print()
+
+    engine = create_engine(settings.dburl)
+    Base.metadata.create_all(engine)
+    print("Database initialized.")
+    return
+
 def main():
     args = get_args()
 
@@ -97,6 +114,9 @@ def main():
 
     loginit("DEBUG" if args.verbose else "INFO")
 
+    if args.cmd == "createdb":
+        createdb()
+        return
 
     if args.cmd == "stop":
         stopfile.touch()

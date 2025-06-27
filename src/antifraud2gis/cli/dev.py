@@ -1,7 +1,7 @@
 import argparse
 import time
 import random
-import pkg_resources
+import importlib.util
 import redis
 import random
 from rich import print_json
@@ -34,6 +34,7 @@ from ..session import session
 from ..utils import random_company
 from ..companydb import update_company, check_by_oid, get_by_oid, dbsearch, dbtruncate, make_connection
 from ..db import db
+from ..dbsession import get_db_session
 
 def countdown(n=5):
     for i in range(n, 0, -1):
@@ -130,8 +131,6 @@ def handle_dev(args: argparse.Namespace):
         else:
             print("Running in dry run mode")
 
-    elif cmd == "location":
-        print(pkg_resources.resource_filename("antifraud2gis", ""))
     elif cmd == "findnew":
         findnew()
     elif cmd == "tmp":
@@ -361,9 +360,10 @@ def main():
             print(u)
 
     elif cmd == "user-reviews":
-        u = User(args.args[0])
-        print(u)
-        for r in u.reviews():
+        public_id = args.args[0]
+        dbsession = get_db_session()
+        u = User.get_or_fetch(public_id=public_id,dbsession=dbsession)
+        for r in u.reviews:
             print(r)
 
 
@@ -442,11 +442,15 @@ def main():
 
 
     elif cmd == "sys":
-
         print("System information\n---")
 
         print(f"Python: {sys.version}")
-        print(f"Package location: {print(pkg_resources.resource_filename('antifraud2gis', ''))}")
+
+        spec = importlib.util.find_spec('antifraud2gis')
+        if spec and spec.origin:
+            print("Package location:", spec.origin)
+        else:
+            print("Package not found")
 
         print(f"HTTPS_PROXY env variable: {os.getenv('HTTPS_PROXY', None)}")
         r = requests.get("https://ipinfo.io/ip", proxies={"https": None, "http": None})
@@ -591,9 +595,6 @@ def main():
                     _tmp_none += 1
                 _tmp_total+=1
                 print(f"total {_tmp_total} title: {_tmp_hastitle} none: {_tmp_none} type_error: {_type_error}, {_comp_error=} {_updated=}")
-
-
-
 
 
     elif cmd == "convert":

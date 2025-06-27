@@ -1,3 +1,5 @@
+from typing import Optional
+
 import json
 from loguru import logger
 import time
@@ -9,16 +11,21 @@ import traceback
 import numpy as np
 import lmdb
 import redis
+
+
 from rich.progress import Progress
 from rich import print_json
 from rich.pretty import pretty_repr
 from requests.exceptions import RequestException
 from typing import Generator
 
+from sqlalchemy import Column, String, Text, ForeignKey, func
+from sqlalchemy.orm import declarative_base, relationship, Mapped
+
 from .settings import settings
 from .const import DATAFORMAT_VERSION, SLEEPTIME, WSS_THRESHOLD, LOAD_NREVIEWS, REVIEWS_KEY, LMDB_MAP_SIZE
 from .user import User, get_user
-from .review import Review
+# from .review import Review
 from .session import session
 from .exceptions import AFNoCompany, AFNoTitle, AFCompanyError, AFCompanyNotFound
 from .aliases import resolve_alias
@@ -26,21 +33,38 @@ from .statistics import statistics
 from .aliases import aliases, resolve_alias
 from .db import db
 from .companydb import dbsearch
+from .base import Base
+from .dbsession import get_db_session
 
 # to avoid circular import
 #class RelationDict:
 #    pass
 
 
-class Company:
+class Company(Base):
 
-    relations: 'RelationDict'
+    __tablename__ = "company"
 
-    def __init__(self, object_id: str):
+    # relations: 'RelationDict'
+
+    object_id = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    city = Column(String, nullable=False)
+    address = Column(String, nullable=False)
+    error = Column(String, nullable=True)
+    reviews: Mapped[list["Review"]] = relationship(back_populates="company")
+
+    def __init__(self, object_id: str, title: str, city: str, address: str, error: Optional[str] = None):
         assert object_id is not None
 
+        self.object_id = object_id
+        self.title = title
+        self.city = city
+        self.address = address
+        return
 
-        object_id = resolve_alias(object_id)
+
+        # object_id = resolve_alias(object_id)
 
         if not object_id.isdigit():
             raise AFNoCompany(f'Not an digital OID {object_id!r}')
@@ -347,22 +371,10 @@ class Company:
 
         if self.error:
             return f'Company({self.object_id} {self.title!r} ERR:{self.error})'
-   
-        titlestr = f"{self.title!r} [{self.alias}]" if self.alias else repr(self.title)
-
+           
         tags = " "
-        if self.frozen:
-            tags += "[FROZEN]"
 
-        if self.trusted is None:
-            trusted_line = "?"
-        else:
-            if self.trusted:
-                trusted_line = "TRUSTED"
-            else:
-                trusted_line = f"RISK ({'+'.join(self.detections)})"
-
-        return f'Company({self.object_id} rate: {self.branch_rating_2gis} {titlestr} addr: {self.address} reviews:{len(self._reviews) if self._reviews else "not loaded"}{tags} {trusted_line})'
+        return f'Company({self.object_id} {self.title} addr: {self.address} reviews:{self.nreviews()}{tags})'
 
     def get_title(self):
         return self.title or self.object_id
@@ -394,16 +406,25 @@ class Company:
                 
         return data
 
-    def reviews(self):
-        for r in self._reviews:
+    def get_reviews(self):
+        from .review import Review
+        for r in self._reviews:            
             rev = Review(r, company=self)
             if rev.age > settings.max_review_age:
                 continue
             yield rev
 
-    def nreviews(self, provider = None):
+    def nreviews(self, provider = None, dbsession = None):
+        from .review import Review
+
+        dbsession = dbsession or get_db_session()
 
         if provider is None:
+            return dbsession.query(func.count(Review.id))\
+                        .filter(Review.object_id == self.object_id)\
+                        .scalar() or 0
+
+
             return len(self._reviews)
         # count reviews now myself
         n = 0
@@ -418,7 +439,8 @@ class Company:
         return n
 
 
-    def review_from(self, uid: str) -> Review:
+    def review_from(self, uid: str) -> 'Review':
+        from .review import Review
         self.load_reviews()
         for r in self._reviews:
             if r['user']['public_id'] == uid:

@@ -12,6 +12,9 @@ class Settings():
         self.algo = 1
 
         self.storage = Path("~/.af2gis-storage").expanduser()
+
+        self.dburl = "sqlite:///" + str(self.storage / "db.sqlite3")
+                                            
         self.user_storage = self.storage / "users"
         self.lmdb_storage = self.storage / "db.lmdb"
 
