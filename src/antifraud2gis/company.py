@@ -9,7 +9,7 @@ import gzip
 import zlib
 import traceback
 import numpy as np
-import lmdb
+# import lmdb
 import redis
 
 
@@ -19,8 +19,8 @@ from rich.pretty import pretty_repr
 from requests.exceptions import RequestException
 from typing import Generator
 
-from sqlalchemy import Column, String, Text, ForeignKey, func
-from sqlalchemy.orm import declarative_base, relationship, Mapped
+from sqlalchemy import Column, String, Text, Integer, Float, ForeignKey, func
+from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
 
 from .settings import settings
 from .const import DATAFORMAT_VERSION, SLEEPTIME, WSS_THRESHOLD, LOAD_NREVIEWS, REVIEWS_KEY, LMDB_MAP_SIZE
@@ -52,9 +52,133 @@ class Company(Base):
     city = Column(String, nullable=False)
     address = Column(String, nullable=False)
     error = Column(String, nullable=True)
+
+    count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
+    branch_count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
+    rating_2gis: Mapped[float] = mapped_column(Float, nullable=True)
+
     reviews: Mapped[list["Review"]] = relationship(back_populates="company")
 
-    def __init__(self, object_id: str, title: str, city: str, address: str, error: Optional[str] = None):
+
+
+
+    #def __init__(self):
+    #    print("zzz company init")
+
+    @classmethod
+    def get_or_fetch(cls, object_id: str, dbsession=None) -> "Company":        
+        dbsession = dbsession or get_db_session()
+        print(f"company.get_or_fetch {object_id}")
+        # Try to load from DB
+        company = dbsession.get(cls, object_id)
+        if company and company.rating_2gis is not None:
+            return company
+        
+
+        c = cls.fetch(object_id, dbsession=dbsession)
+        print("c:", c)
+        
+        
+        # Try to load from DB AGAIN
+        c = dbsession.get(cls, object_id)
+        return c
+
+    @classmethod
+    def fetch(cls, object_id: str, dbsession) -> "Company":
+
+        """ Fetch ALL reviews for company (all users) + update meta """
+
+        url = f'https://public-api.reviews.2gis.com/2.0/branches/{object_id}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
+
+        meta = None
+
+        page=0
+        while url:
+            if ':8080' in url:
+                logger.debug(f'strip :8080 from {url}')
+                url = url.replace(':8080', '')
+            logger.debug(f".. load company reviews p{page} for {object_id}: {url}")
+            r = None
+            while r is None:
+
+                try:                    
+                    r = session.get(url)
+                except RequestException as e:
+                    print("RequestException", e)
+                    time.sleep(1)
+            
+            #print(r.status_code)
+            #print(r)
+            #print(r.text)
+
+            if r.status_code == 400:
+                raise NotImplementedError
+                print("bad request", url)
+                self.save_basic()
+                break
+
+            r.raise_for_status()
+            data = r.json()
+
+            if meta is None:
+                meta = data['meta']
+
+            for r in data['reviews']:
+                public_id = r['user']['public_id']
+                u = User.get_or_fetch(public_id=public_id, dbsession=dbsession)
+                print("  ", u)
+
+            # branch review may exists, but not total_count
+            # 70000001028529798
+
+            if False:
+                if self.total_count_2gis is None:
+                    self.total_count_2gis = data['meta']['total_count']
+                    self.branch_count_2gis = data['meta']['branch_reviews_count']
+                    self.branch_rating_2gis = data['meta']['branch_rating']
+                    # print(f"Total/Branch reviews count: {self.total_count_2gis}/{self.branch_count_2gis}")
+
+
+            #if self.total_count_2gis == 0 or self.branch_count_2gis == 0:                
+            #    raise AFNoCompany(f"No reviews for {self.object_id}")
+
+            # print(f"{self.object_id} page {page} first: {data['reviews'][0]['date_created']} last: {data['reviews'][-1]['date_created']}")
+
+            # self._reviews.extend(data['reviews'])
+            url = data['meta'].get('next_link')
+            logger.debug(f'next_link: {url}')
+            time.sleep(SLEEPTIME)
+
+            page+=1
+        
+
+        company = dbsession.get(cls, object_id)
+        if company is None:
+            raise AFNoCompany
+
+
+        if company.rating_2gis is None:
+            print("Update meta info for", company)
+            company.count_2gis = meta['total_count']
+            company.branch_count_2gis = meta['branch_reviews_count']
+            company.rating_2gis = meta['branch_rating']
+
+            dbsession.add(company)
+            dbsession.commit()
+
+
+        logger.info(f"Company {object_id}: loaded from network {company.nreviews()} reviews")
+        # why we were called?
+        # print("----------")
+        # print("".join(traceback.format_stack(limit=10)))         
+
+        statistics.total_companies_loaded+=1
+        statistics.total_companies_loaded_network+=1
+
+        return company
+
+
+    def OLD__init__(self, object_id: str, title: str, city: str, address: str, error: Optional[str] = None):
         assert object_id is not None
 
         self.object_id = object_id
@@ -374,7 +498,7 @@ class Company(Base):
            
         tags = " "
 
-        return f'Company({self.object_id} {self.title} addr: {self.address} reviews:{self.nreviews()}{tags})'
+        return f'Company({self.object_id} {self.title} ({self.rating_2gis}) addr: {self.address} reviews:{self.nreviews()}{tags})'
 
     def get_title(self):
         return self.title or self.object_id

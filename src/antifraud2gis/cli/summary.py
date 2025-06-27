@@ -5,7 +5,7 @@ from rich.table import Table
 import time
 import sys
 import re
-import lmdb
+# import lmdb
 from pathlib import Path
 
 from collections import defaultdict

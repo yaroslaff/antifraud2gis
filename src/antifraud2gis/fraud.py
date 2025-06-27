@@ -29,6 +29,8 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
     debug_oids = os.getenv("DEBUG_OIDS", "").split(" ")
     debug_uids = os.getenv("DEBUG_UIDS", "").split(" ")
 
+    print("detect", c)
+
     # notes = Usernotes()
 
     if c.report_path.exists() and not force and not explain:

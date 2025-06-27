@@ -1,6 +1,6 @@
 from pathlib import Path
 import os
-import lmdb
+# import lmdb
 from dotenv import load_dotenv
 from .const import LMDB_MAP_SIZE
 
@@ -16,7 +16,7 @@ class Settings():
         self.dburl = "sqlite:///" + str(self.storage / "db.sqlite3")
                                             
         self.user_storage = self.storage / "users"
-        self.lmdb_storage = self.storage / "db.lmdb"
+        # self.lmdb_storage = self.storage / "db.lmdb"
 
         # self.private_user_storage = self.storage / "users" / "_private.json"
         self.company_storage = self.storage / "companies"
@@ -92,11 +92,12 @@ class Settings():
         if not self.company_storage.exists():
             self.company_storage.mkdir(parents=True)
 
-        if not self.lmdb_storage.exists():
-            env = lmdb.open(self.lmdb_storage.as_posix(), map_size=LMDB_MAP_SIZE)
-            with env.begin(write=True):
-                pass  
-            env.close()
+        if False:
+            if not self.lmdb_storage.exists():
+                env = lmdb.open(self.lmdb_storage.as_posix(), map_size=LMDB_MAP_SIZE)
+                with env.begin(write=True):
+                    pass  
+                env.close()
 
 
     def param_fp(self):

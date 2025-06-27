@@ -13,7 +13,7 @@ from rich.console import Console
 from rich.table import Table
 import redis
 import gzip
-import lmdb
+# import lmdb
 import os
 
 from pathlib import Path
@@ -36,6 +36,8 @@ from ..aliases import resolve_alias
 from ..companydb import dbsearch
 from ..aliases import aliases
 from ..base import Base
+from ..dbsession import get_db_session
+
 
 # CLI
 from .summary import printsummary
@@ -108,11 +110,17 @@ def main():
 
     stopfile = Path('~/.af2gis-stop').expanduser()
     
+    dbsession = None
+
     r = redis.Redis(decode_responses=True)
 
     cl = CompanyList()
 
     loginit("DEBUG" if args.verbose else "INFO")
+
+
+    dbsession = get_db_session()
+
 
     if args.cmd == "createdb":
         createdb()
@@ -143,25 +151,13 @@ def main():
         c2 = cl[args.args[1]]
         compare(c1, c2)
 
-    elif args.cmd == "info":
-        
+    elif args.cmd == "info":       
         try:
-            c = Company(args.company)
+            c = Company.get_or_fetch(object_id=resolve_alias(args.company))
         except (AFNoCompany, AFNoTitle):
             print(f"Company {args.company} not found")
             return
-        c.load_reviews()
-        basic = json.load(gzip.open(c.basic_path))
         print(c)
-        print_json(data=basic)
-
-        try:
-            report = json.load(gzip.open(c.report_path))
-        except FileNotFoundError:
-            print("No report yet, run fraud first")
-            return
-        print_json(data=report['score'])
-        print(f"{len(report['relations'])} relations")
         
     elif args.cmd == "search":
         try:
@@ -177,7 +173,24 @@ def main():
             print("total:", len(res))
         
 
-    elif args.cmd in ["list", "fraud", "delreport", "wipe", "submitfraud", "export"]:
+    elif args.cmd == "fraud":
+        try:
+            c = Company.get_or_fetch(object_id=resolve_alias(args.company))
+        except (AFNoCompany, AFNoTitle, AFCompanyError):
+            print("No such company (geo or no 2gis reviews)")
+            return
+
+        if args.show:
+            settings.show_hit_th = args.show
+
+        try:
+            detect(c, cl, explain=args.explain, force=args.overwrite)
+        except AFReportAlreadyExists as e:
+            print(f"Report already exists for {c} and no --overwrite")
+        dump_report(c.object_id)
+
+
+    elif args.cmd in ["list", "delreport", "wipe", "submitfraud", "export"]:
 
         # sanity check
         if args.cmd in ["submitfraud", "fraud", "delreport", "wipe"] and not any_filter(args):
@@ -196,7 +209,7 @@ def main():
         # if company is given, create it first (if it's missing)
         if args.company and args.cmd not in ['wipe']:
             try:
-                Company(args.company)
+                c = Company.get_or_fetch(object_id=resolve_alias(args.company))
             except (AFNoCompany, AFNoTitle, AFCompanyError):
                 print("No such company (geo or no 2gis reviews)")
                 return
@@ -205,9 +218,6 @@ def main():
         if args.cmd == "delreport":
             # force args.report
             args.report = True
-        elif args.cmd == "fraud":
-            if args.show:
-                settings.show_hit_th = args.show
 
         total_processed = 0
         effectively_processed = 0
@@ -222,17 +232,6 @@ def main():
                     _print(c.object_id)
                 else:
                     print(c)
-
-            elif args.cmd == "fraud":
-
-                if args.show:
-                    settings.show_hit_th = args.show
-                try:
-                    detect(c, cl, explain=args.explain, force=args.overwrite)
-                    effectively_processed += 1
-                except AFReportAlreadyExists as e:
-                    print(f"Report already exists for {c} and no --overwrite")
-                dump_report(c.object_id)
 
             elif args.cmd == "submitfraud":
                 if args.maxq:

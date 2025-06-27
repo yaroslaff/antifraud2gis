@@ -10,7 +10,7 @@ import traceback
 import sys
 import datetime
 import gzip
-import lmdb
+# import lmdb
 import tempfile
 import os
 

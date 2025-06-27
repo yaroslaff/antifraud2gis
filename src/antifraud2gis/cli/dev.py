@@ -16,10 +16,11 @@ from collections import defaultdict
 import numpy as np
 import json
 import gzip
-import lmdb
+# import lmdb
 
 from ..company import CompanyList, Company
 from ..user import User, reset_user_pool
+from ..review import Review
 from ..settings import settings
 from ..fraud import detect, dump_report
 from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError
@@ -268,50 +269,6 @@ def do_provider(args, cl: CompanyList):
     return
 
 
-def lmdb_dump(args):
-
-    try:
-        needle = args.args[0]
-    except IndexError:
-        needle = None
-        
-    lmdb_path = settings.lmdb_storage.as_posix()
-
-    print("Dump", lmdb_path)
-
-    env = lmdb.open(lmdb_path, readonly=True, map_size=LMDB_MAP_SIZE)
-
-    if needle is None:
-        # dump everything
-        with env.begin() as txn:
-            with txn.cursor() as cur:
-                for key, val in cur:
-                    data = json.loads(val.decode())
-                    print(key.decode())
-                    print_json(data=data)
-
-    elif needle.startswith('user:') or needle.startswith('objects:'):
-        # dump specific key
-        with env.begin() as txn:
-            with txn.cursor() as cur:
-                for key, val in cur:
-                    if key.decode() == needle:
-                        data = json.loads(val.decode())
-                        print(key.decode())
-                        print_json(data=data)
-
-    else:
-        # dump company by name
-        with env.begin() as txn:
-            with txn.cursor() as cur:
-                for key, val in cur:
-                    if key.startswith(b'object:'):
-                        data = json.loads(val.decode())
-                        if needle is None or needle.lower() in data['name']:
-                            print(key.decode())
-                            print_json(data=data)
-
-
 def get_args():
 
 
@@ -325,7 +282,7 @@ def get_args():
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['company-users', 'users', 'user-reviews', 'company-reviews', 'queue', 'explore', 'provider', 'sys', 'filldb', 'dev', 'lmdb', 'convert', 'delkeys', 'lmdbrm'])
+    parser.add_argument("cmd", choices=['company-users', 'users', 'user-reviews', 'company-reviews', 'queue', 'explore', 'provider', 'sys', 'filldb', 'dev', 'convert', 'delkeys', 'dump'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--full", default=False, action='store_true')
     parser.add_argument("args", nargs='*', help='extra args')
@@ -344,6 +301,25 @@ def get_args():
     g.add_argument("--overwrite", default=None, action='store_true', help="Recalculate even if fraud report exists")
 
     return parser.parse_args()
+
+def db_dump():
+    dbsession = get_db_session()
+    limit = 10
+
+    print(f"Users (up to {limit}/{dbsession.query(User).count()}):")
+    for idx, user in enumerate(dbsession.query(User).limit(limit).all()):
+        print(idx, user)
+    print()
+
+    print(f"Companies (up to {limit}/{dbsession.query(Company).count()}):")
+    for idx, company in enumerate(dbsession.query(Company).limit(limit).all()):
+        print(idx, company)
+    print()
+
+    print(f"Reviews (up to {limit}/{dbsession.query(Review).count()}):")
+    for idx, review in enumerate(dbsession.query(Review).limit(limit).all()):
+        print(idx, review)
+    print()
 
 def main():
     args = get_args()
@@ -373,13 +349,6 @@ def main():
         c.load_reviews()
         for r in c.reviews():
             print(r)
-
-    elif cmd == "lmdbrm":
-        key = args.args[0].encode()
-        env = lmdb.open(settings.lmdb_storage.as_posix(), map_size=LMDB_MAP_SIZE)
-        with env.begin(write=True) as txn:
-            deleted = txn.delete(key)
-            print(f"Deleted ({deleted}) {key}")
 
 
     elif cmd == "users":
@@ -557,59 +526,10 @@ def main():
 
     elif cmd == "dev":
         return
-
-        _tmp_total = 0
-        _tmp_none = 0
-        _tmp_hastitle = 0
-        _type_error = 0
-        _comp_error = 0
-        _updated = 0
-
-        for idx, f in enumerate(settings.company_storage.glob('*-basic.json.gz')):
-            company_oid = f.name.split('-')[0]
-
-            print(idx, company_oid)
-            # load this .jzon.gz file
-            with gzip.open(f, 'rt') as f:
-                _tmpdata = json.load(f)
-
-                if _tmpdata['title']:
-                    _tmp_hastitle += 1
-                else:
-                    print("NO TITLE FOR ", company_oid)
-                    try:
-                        # _tmp_title, _tmp_addr = Company.resolve_oid(company_oid)
-                        try:
-                            _c = Company(company_oid)
-                            print("UPDATED", _c)
-                            _updated += 1
-                            _c.save_basic()
-                        except AFCompanyError:
-                            _comp_error += 1
-                            continue
-                    except TypeError:
-                        print("TYPE ERROR", company_oid)
-                        _type_error += 1
-                        continue
-                    # print("RESOLVED TO", _tmp_title, _tmp_addr)
-                    _tmp_none += 1
-                _tmp_total+=1
-                print(f"total {_tmp_total} title: {_tmp_hastitle} none: {_tmp_none} type_error: {_type_error}, {_comp_error=} {_updated=}")
-
-
-    elif cmd == "convert":
-        nusers = User.nusers()
-        env = lmdb.open(settings.lmdb_storage.as_posix(), map_size=LMDB_MAP_SIZE)
-        
-        with env.begin(write=True) as txn:
-            for idx, u in enumerate(User.users()):
-                print(f"{idx}/{nusers} {u.public_id}")
-                u.lmdb_save(txn=txn)
-
         
 
-    elif cmd == "lmdb":
-        lmdb_dump(args)        
+    elif cmd == "dump":
+        db_dump()        
 
     elif cmd == "delkeys":
         do_delkeys(args.args[0])

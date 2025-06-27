@@ -132,6 +132,7 @@ aliases = {
 }
 
 def resolve_alias(alias: str):
+    print("Resolve", alias)
     for k, v in aliases.items():
         if v.get('alias') == alias:
             return k
