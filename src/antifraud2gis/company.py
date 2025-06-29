@@ -20,7 +20,7 @@ from requests.exceptions import RequestException
 from typing import Generator
 
 from sqlalchemy import Column, String, Text, Integer, Float, ForeignKey, func
-from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
+from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor, Session
 
 from .settings import settings
 from .const import DATAFORMAT_VERSION, SLEEPTIME, WSS_THRESHOLD, LOAD_NREVIEWS, REVIEWS_KEY, LMDB_MAP_SIZE
@@ -61,6 +61,10 @@ class Company(Base):
 
 
 
+    @reconstructor
+    def reconstructor(self):
+        self.report_path = settings.company_storage / (self.object_id + '-report.json.gz')
+
 
     #def __init__(self):
     #    print("zzz company init")
@@ -68,7 +72,6 @@ class Company(Base):
     @classmethod
     def get_or_fetch(cls, object_id: str, dbsession=None) -> "Company":        
         dbsession = dbsession or get_db_session()
-        print(f"company.get_or_fetch {object_id}")
         # Try to load from DB
         company = dbsession.get(cls, object_id)
         if company and company.rating_2gis is not None:
@@ -76,12 +79,25 @@ class Company(Base):
         
 
         c = cls.fetch(object_id, dbsession=dbsession)
-        print("c:", c)
-        
         
         # Try to load from DB AGAIN
-        c = dbsession.get(cls, object_id)
+        # c = dbsession.get(cls, object_id)
         return c
+
+    def is_loaded(self) -> bool:
+        # partially loaded: when record created (few (often 1) review(s) for it, no meta info)
+        # fully loaded: all users loaded and metainfo
+
+        return self.rating_2gis is not None
+
+    def full_load(self, dbsession: Optional[Session] = None):
+        dbsession = dbsession or get_db_session()
+
+        if self.is_loaded():
+            return
+        
+        print("full_load: not loaded:", self)
+        Company.fetch(object_id=self.object_id, dbsession=dbsession)
 
     @classmethod
     def fetch(cls, object_id: str, dbsession) -> "Company":
@@ -107,15 +123,9 @@ class Company(Base):
                     print("RequestException", e)
                     time.sleep(1)
             
-            #print(r.status_code)
-            #print(r)
-            #print(r.text)
 
             if r.status_code == 400:
                 raise NotImplementedError
-                print("bad request", url)
-                self.save_basic()
-                break
 
             r.raise_for_status()
             data = r.json()
@@ -126,23 +136,6 @@ class Company(Base):
             for r in data['reviews']:
                 public_id = r['user']['public_id']
                 u = User.get_or_fetch(public_id=public_id, dbsession=dbsession)
-                print("  ", u)
-
-            # branch review may exists, but not total_count
-            # 70000001028529798
-
-            if False:
-                if self.total_count_2gis is None:
-                    self.total_count_2gis = data['meta']['total_count']
-                    self.branch_count_2gis = data['meta']['branch_reviews_count']
-                    self.branch_rating_2gis = data['meta']['branch_rating']
-                    # print(f"Total/Branch reviews count: {self.total_count_2gis}/{self.branch_count_2gis}")
-
-
-            #if self.total_count_2gis == 0 or self.branch_count_2gis == 0:                
-            #    raise AFNoCompany(f"No reviews for {self.object_id}")
-
-            # print(f"{self.object_id} page {page} first: {data['reviews'][0]['date_created']} last: {data['reviews'][-1]['date_created']}")
 
             # self._reviews.extend(data['reviews'])
             url = data['meta'].get('next_link')
@@ -158,7 +151,6 @@ class Company(Base):
 
 
         if company.rating_2gis is None:
-            print("Update meta info for", company)
             company.count_2gis = meta['total_count']
             company.branch_count_2gis = meta['branch_reviews_count']
             company.rating_2gis = meta['branch_rating']

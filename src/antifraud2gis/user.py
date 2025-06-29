@@ -15,7 +15,7 @@ import tempfile
 import os
 
 from sqlalchemy import Column, String, Text, ForeignKey, Boolean
-from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column
+from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor
 
 from .db import db
 from .const import WSS_THRESHOLD, LOAD_NREVIEWS, SLEEPTIME, LMDB_MAP_SIZE
@@ -26,6 +26,7 @@ from .session import session
 from .logger import logger
 from .base import Base
 from .dbsession import get_db_session
+from .exceptions import AFUserPrivate
 
 THRESHOLD_NR=3
 THRESHOLD_TS=1.5
@@ -52,17 +53,11 @@ class User(Base):
     public_id: Mapped[str] = mapped_column(String, primary_key=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     private: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-
     reviews: Mapped[list["Review"]] = relationship(back_populates="user")
 
-    def __init__(self, public_id: str, name: str, private: bool = False ):
-
-        self.public_id = public_id
-        self.name = name
-        self.private = private
-        self.reviews_path = settings.user_storage / (public_id + '-reviews.json.gz')
-        self._reviews = list()
-        # self.load(local_only=True)
+    @reconstructor
+    def reconstructor(self):
+        print("user reconstructor", self)
 
     @classmethod
     def get_or_fetch(cls, public_id: str, dbsession=None) -> "User":
@@ -73,13 +68,11 @@ class User(Base):
         if user:
             return user
         
+        user = cls.fetch(public_id, dbsession=dbsession)
+        print(f"Fetched user {user}")
 
-        u = cls.fetch(public_id, dbsession=dbsession)
-        print("u:", u)
-        
-        
         # Try to load from DB AGAIN
-        user = dbsession.get(cls, public_id)
+        #user = dbsession.get(cls, public_id)
         return user
         
 
@@ -95,11 +88,45 @@ class User(Base):
         dbsession.commit()
         return user
 
+
+
+    @classmethod
+    def fetch_base(cls, public_id: str, dbsession = None) -> 'User':
+        base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
+        r = session.get(base_url)
+        r.raise_for_status()
+
+        data = r.json()
+
+        print(f"user.fetch_base {public_id}")
+        print_json(data=data)
+
+        private = data['public_user']['privacy'] == 'CLOSE'
+
+        _user = User(public_id=public_id, name=data['public_user']['name'], private=private)
+        dbsession.add(_user)
+        dbsession.commit()
+        return _user
+
     @classmethod
     def fetch(cls, public_id: str, dbsession = None) -> 'User':
-
         from .company import Company
         from .review import Review
+
+        def split_addr(addr: str): 
+            if ',' in obj['address']:
+                city, address = obj['address'].split(',', 1)
+            else:
+                city = obj['address']
+                address = None
+            
+            city = city.strip()
+            if address:
+                address = address.strip()
+            
+            return city, address
+
+
 
         url = f'https://api.auth.2gis.com/public-profile/1.1/user/{public_id}/content/feed?page_size=20'
 
@@ -111,16 +138,21 @@ class User(Base):
 
         _reviews = list()
 
+        # get base info for user
+        _user = cls.fetch_base(public_id=public_id, dbsession=dbsession)
+
+        print("fetch for", _user)
+
         while True:
             logger.debug(f"Loading user reviews p{page} for user {public_id} from {url}")
             time.sleep(SLEEPTIME)
             r = session.get(url)
             if r.status_code == 403:
-                # print("New private profile", self.public_id)
-                # db.add_private_profile(self.public_id)
-                print(r)
-                print(r.status_code)
-                raise NotImplementedError
+                logger.debug(f"Profile {public_id} is private")
+                _user = User(public_id=public_id, private=True)
+                dbsession.add(_user)
+                dbsession.commit()
+                return _user
 
             elif r.status_code in [400, 500]:
                 logger.warning(f"user {public_id} reviews error {r.status_code} url: {url}")
@@ -134,21 +166,15 @@ class User(Base):
                 try:
                     review_data = el['review']
 
-                    print_json(data=review_data)
-                    if _user is None:
-                        # Make user record
-                        _user = User(public_id=review_data['user']['public_id'], name=review_data['user']['name'], private=False)
-                        dbsession.add(_user)
-                        dbsession.commit()
-                    
-
                     # save company (if needed)
                     obj = review_data['object']
+                    print_json(data=obj)
                     _company = dbsession.get(Company, obj['id'])
                     if _company is None:
-                        print("company Not found")
-                        city, address = obj['address'].split(',', 1)
-                        _company = Company(object_id=obj['id'], title=obj['name'], city=city.strip(), address=address.strip())
+                        print(f"Split ({obj['id']}): {obj['address']!r}")
+                        city, address = split_addr(obj['address'])
+
+                        _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
                         dbsession.add(_company)
                         dbsession.commit()
                     
@@ -162,9 +188,6 @@ class User(Base):
                     )
                     dbsession.add(_review)
                     dbsession.commit()
-
-
-
 
                 except KeyError:
                     continue

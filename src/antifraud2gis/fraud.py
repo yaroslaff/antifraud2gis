@@ -12,6 +12,10 @@ import numpy as np
 import gzip
 from rich.progress import Progress
 
+from typing import Optional
+
+from sqlalchemy.orm import Session
+
 from .db import db
 from .const import WSCORE_THRESHOLD, WSCORE_HITS_THRESHOLD, MAX_USER_REVIEWS
 from .logger import logger
@@ -23,8 +27,9 @@ from .settings import settings
 from .exceptions import AFReportNotReady, AFNoCompany, AFReportAlreadyExists
 # from .usernotes import Usernotes
 from .fd.master import MasterFD
+from .dbsession import get_db_session
 
-def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
+def detect(c: Company, cl: CompanyList, explain: bool = False, force=False, dbsession: Session = None):
 
     debug_oids = os.getenv("DEBUG_OIDS", "").split(" ")
     debug_uids = os.getenv("DEBUG_UIDS", "").split(" ")
@@ -33,7 +38,10 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
 
     # notes = Usernotes()
 
+    logger.debug("Run fraud detection for", c)
+
     if c.report_path.exists() and not force and not explain:
+        logger.debug(f"Report {c.report_path} exists")
         raise AFReportAlreadyExists(f"Report already exists: {c.report_path}")
         print(f"SKIP because exists {c.report_path}")
         # read 
@@ -51,8 +59,7 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
         print(c.error)
         return
 
-    c.load_reviews()
-    c.load_users()
+    c.full_load(dbsession=dbsession)
 
     """ skip too small targets """
     if c.nreviews() <= settings.min_reviews:
@@ -69,8 +76,6 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
 
         c.trusted = True
         c.detections = list()
-
-        update_company(c.export())
 
         with gzip.open(c.report_path, "wt") as fh:
             json.dump(report, fh)
@@ -118,8 +123,10 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False):
     return score
 
 
-def dump_report(object_id: str):
-    c = Company(object_id)
+def dump_report(object_id: str, dbsession: Optional[Session] = None):
+    dbsession = dbsession or get_db_session()
+
+    c = Company.get_or_fetch(object_id, dbsession=dbsession)
     if c.error:
         print(f"ERROR for {c.get_title()} ({c.address}): {c.error}")
         return

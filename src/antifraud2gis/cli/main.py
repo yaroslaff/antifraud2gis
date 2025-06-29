@@ -18,7 +18,11 @@ import os
 
 from pathlib import Path
 
+# import sqlite3
+
+import sqlalchemy
 from sqlalchemy import create_engine
+from sqlalchemy.orm import Session
 
 from ..company import Company, CompanyList
 from ..user import User
@@ -64,7 +68,7 @@ def get_args():
     aa.parse()
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases', 'createdb'])
+    parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--sleep", type=float, default=None, help='sleep N.M seconds after each processed company')
     parser.add_argument("--fmt", "-f", default="normal", choices=['brief', 'normal', 'full'])
@@ -105,6 +109,14 @@ def createdb():
     print("Database initialized.")
     return
 
+def check_or_create_db(dbsession: Session):
+    try:
+        n_users = dbsession.query(User).count()
+    except sqlalchemy.exc.OperationalError as e:
+        print("No db file? Create it")
+        createdb()
+        n_users = dbsession.query(User).count()
+
 def main():
     args = get_args()
 
@@ -120,11 +132,8 @@ def main():
 
 
     dbsession = get_db_session()
+    check_or_create_db(dbsession=dbsession)
 
-
-    if args.cmd == "createdb":
-        createdb()
-        return
 
     if args.cmd == "stop":
         stopfile.touch()
@@ -184,7 +193,7 @@ def main():
             settings.show_hit_th = args.show
 
         try:
-            detect(c, cl, explain=args.explain, force=args.overwrite)
+            detect(c, cl, explain=args.explain, force=args.overwrite, dbsession=dbsession)
         except AFReportAlreadyExists as e:
             print(f"Report already exists for {c} and no --overwrite")
         dump_report(c.object_id)
