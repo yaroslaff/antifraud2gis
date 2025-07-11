@@ -2,9 +2,9 @@ from collections import Counter
 import numpy as np
 
 from .fd import BaseFD
-from ..user import User
-from ..company import Company
-from ..review import Review
+from ..models.author import Author
+from ..models.company import Company
+from ..models.review import Review
 from ..settings import settings
 from ..logger import logger
 
@@ -30,18 +30,17 @@ class EmptyUserFD(BaseFD):
 
             if self._explain:
 
-                if cr.uid is None:
-                    self.records.append(f"NONE {cr.created_str} {cr.rating } {cr.provider} uid:{cr.uid} {cr.user_name} ")
+                if cr.author is None:
+                    # use names in review for user is none
+                    print("rev from:", cr.name)
+                    self.records.append(f"NONE {cr.created_str} {cr.rating } {cr.provider} uid:{cr.author_id} {cr.name} ")
                 else:
-                    u = User(cr.uid)
-                    u.load()
-                    self.records.append(f"EMPTY {cr.created_str} {cr.rating} {cr.provider} uid: {cr.uid} {u.name} nr:{u.nreviews()}")
+                    author = cr.author
+                    self.records.append(f"EMPTY {cr.created_str} {cr.rating} {cr.provider} uid: {cr.author_id} {cr.name} nr:{author.nreviews()}")
 
         else:
             self.non_empty_ratings.append(cr.rating)
-            u = User(cr.uid)
-            u.load()
-            self.records.append(f"REAL {cr.created_str} {cr.rating} uid: {cr.uid} {u.name} nr:{u.nreviews()}")
+            self.records.append(f"REAL {cr.created_str} {cr.rating} uid: {cr.author_id} {cr.author} nr:{cr.author.nreviews()}")
         
     def get_score(self):
 

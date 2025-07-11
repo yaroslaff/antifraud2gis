@@ -1,8 +1,8 @@
 from enum import Enum
 
-from ..user import User
-from ..company import Company
-from ..review import Review
+from ..models.author import Author
+from ..models.company import Company
+from ..models.review import Review
 from ..settings import settings
 
 class BaseFD():

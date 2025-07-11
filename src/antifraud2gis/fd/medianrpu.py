@@ -3,9 +3,9 @@ import numpy as np
 
 
 from .fd import BaseFD
-from ..user import User
-from ..company import Company
-from ..review import Review
+from ..models.author import Author
+from ..models.company import Company
+from ..models.review import Review
 from ..settings import settings
 from ..logger import logger
 
@@ -31,16 +31,16 @@ class MedianRPUFD(BaseFD):
         if empty:
             return
 
-        u = cr.user
+        author = cr.author
         # self.rpu.append(u.nreviews())
-        self.rpu_list.append(u.nreviews())
-        if u.nreviews() <= settings.median_rpu:
+        self.rpu_list.append(author.nreviews())
+        if author.nreviews() <= settings.median_rpu:
             self.lrpu_ratings.append(cr.rating)
         else:
             self.hrpu_ratings.append(cr.rating)
 
-        if self.explain and u.nreviews() <= settings.median_rpu:
-            self.records.append(f"{u.public_id} {u.name} rating: {cr.rating} num_reviews: {u.nreviews()}")
+        if self.explain and author.nreviews() <= settings.median_rpu:
+            self.records.append(f"{author.public_id} {author.name} rating: {cr.rating} num_reviews: {author.nreviews()}")
 
         self.processed += 1
 

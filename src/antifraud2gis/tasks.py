@@ -5,12 +5,12 @@ import redis
 import json
 # from filelock import FileLock, Timeout
 from .fraud import detect
-from .company import CompanyList, Company
+from .models.company import CompanyList, Company
 from .exceptions import AFNoCompany, AFReportAlreadyExists, AFCompanyNotFound
 from .logger import logger
 from .const import REDIS_WORKER_STATUS, REDIS_WORKER_STATUS_SET, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_LIST, \
     REDIS_TASK_QUEUE_NAME, REDIS_DRAMATIQ_QUEUE
-from .user import reset_user_pool
+# from .user import reset_user_pool
 from .statistics import statistics
 
 broker = dramatiq.get_broker()

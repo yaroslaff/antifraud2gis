@@ -7,9 +7,11 @@ import json
 import gzip
 import datetime
 
-from ..company import Company
-from ..user import User
-from ..review import Review
+from sqlalchemy import inspect
+
+from ..models.company import Company
+from ..models.author import Author
+from ..models.review import Review
 from .fd import BaseFD
 
 from .emptyuser import EmptyUserFD
@@ -24,7 +26,7 @@ class MasterFD(BaseFD):
     _detectors: Dict[str, BaseFD]
 
     # processed users
-    _users: Set[User]
+    _authors: Set[str]
 
     def __init__(self, c: Company, explain: bool = False):
 
@@ -44,7 +46,7 @@ class MasterFD(BaseFD):
             'median_rpu': MedianRPUFD(c, explain=explain),
             'relation': RelationFD(c, explain=explain)            
         }
-        self._users = set()
+        self._authors = set()
         self.providers = defaultdict(int)
 
 
@@ -60,8 +62,8 @@ class MasterFD(BaseFD):
 
         self.providers[cr.provider] += 1
 
-        if cr.is_empty() or cr.user.public_id in self._users:
-            if cr.uid is not None and cr.user.public_id in self._users:
+        if cr.is_empty() or cr.author.public_id in self._authors:
+            if cr.author_id is not None and cr.author.public_id in self._authors:
                 # print(f"User {cr.user.public_id} {cr.created} {cr.provider} already processed DUPLICATE !!!")
                 pass
             self.score['empty_reviews'] += 1
@@ -73,8 +75,8 @@ class MasterFD(BaseFD):
         for d in self._detectors.values():
             d.feed(cr, empty=empty)
 
-        if cr.uid is not None:
-            self._users.add(cr.user.public_id)
+        if cr.author_id is not None:
+            self._authors.add(cr.author.public_id)
 
     def explain(self, fh):
         for detector in self.triggered:

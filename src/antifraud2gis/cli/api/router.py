@@ -5,7 +5,7 @@ import json
 
 from rich import print_json
 
-from ...company import Company, CompanyList
+from ...models.company import Company, CompanyList
 from ...exceptions import AFReportNotReady, AFNoCompany, AFNoTitle, AFCompanyError
 
 router = APIRouter(prefix="/api/0.1")

@@ -2,16 +2,17 @@ from collections import Counter
 from rich import print_json
 import numpy as np
 
+from sqlalchemy import inspect
+
+from ..dbsession import scoped_db_session
 
 from .fd import BaseFD
-from ..user import User, get_user
-from ..company import Company
+from ..models.author import Author
+from ..models.company import Company
 from ..companydb import get_by_oid
-from ..review import Review
+from ..models.review import Review
 from ..settings import settings
 from ..relation import RelationDict
-
-
 
 """
     test companies for relation (detect): 
@@ -35,6 +36,7 @@ class RelationFD(BaseFD):
 
         self.processed_users = 0
         self.risk_users = dict()
+        # self.dbsession = get_db_session()
 
 
     def feed(self, cr: Review, empty: bool = False):
@@ -43,13 +45,19 @@ class RelationFD(BaseFD):
             return
 
 
-        u: User = cr.user
-        for r in u.reviews():
+        author: Author = cr.author
 
-            if r.oid == self._c.object_id:
+
+
+        # u = self.dbsession.merge(u)
+
+
+        for r in author.reviews:
+
+            if r.object_id == self._c.object_id:
                 continue
 
-            rel = self._c.relations[r.oid]
+            rel = self._c.relations[r.object_id]
             rel.hit(cr.rating, r)
 
         self.processed_users += 1
@@ -134,7 +142,7 @@ class RelationFD(BaseFD):
                 print(f"Risk users ({len(self.risk_users)} / {self.processed_users} > {settings.risk_user_ratio}%)", file=fh)
 
                 for idx, public_id in enumerate(self.risk_users.keys(), start=1):
-                    u = get_user(public_id)
+                    u = Author.get_or_fetch(public_id)
                     print(f"user #{idx}. {public_id} {u.name} ({len(self.risk_users[public_id])}):", file=fh)
                     for oid in self.risk_users[public_id]:
                         crec = get_by_oid(oid)

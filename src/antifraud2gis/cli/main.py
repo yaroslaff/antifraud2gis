@@ -24,8 +24,8 @@ import sqlalchemy
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
 
-from ..company import Company, CompanyList
-from ..user import User
+from ..models.company import Company, CompanyList
+from ..models.author import Author
 from ..fraud import detect, dump_report
 from ..compare import compare
 from ..tasks import submit_fraud_task, cooldown_queue
@@ -40,7 +40,7 @@ from ..aliases import resolve_alias
 from ..companydb import dbsearch
 from ..aliases import aliases
 from ..base import Base
-from ..dbsession import get_db_session
+from ..dbsession import DBSession, ScopedDBSession
 
 
 # CLI
@@ -98,24 +98,23 @@ def any_filter(args):
 def createdb():
     print("CREATE db", settings.dburl)
 
-    if False:
-        for table_name, table_obj in Base.metadata.tables.items():
-            print(table_name)
-            print(table_obj.columns.keys())
-            print()
-
     engine = create_engine(settings.dburl)
     Base.metadata.create_all(engine)
     print("Database initialized.")
     return
 
-def check_or_create_db(dbsession: Session):
-    try:
-        n_users = dbsession.query(User).count()
-    except sqlalchemy.exc.OperationalError as e:
-        print("No db file? Create it")
-        createdb()
-        n_users = dbsession.query(User).count()
+def check_or_create_db():
+
+    with DBSession() as dbsession:
+        print(dbsession)
+        try:
+            # n_users = dbsession.query(User).count()
+            n_users = Author.nusers(dbsession=dbsession)
+        except sqlalchemy.exc.OperationalError as e:
+            print("No db file? Create it")
+            createdb()
+            n_users = dbsession.query(Author).count()
+
 
 def main():
     args = get_args()
@@ -130,10 +129,7 @@ def main():
 
     loginit("DEBUG" if args.verbose else "INFO")
 
-
-    dbsession = get_db_session()
-    check_or_create_db(dbsession=dbsession)
-
+    check_or_create_db()
 
     if args.cmd == "stop":
         stopfile.touch()
@@ -162,7 +158,7 @@ def main():
 
     elif args.cmd == "info":       
         try:
-            c = Company.get_or_fetch(object_id=resolve_alias(args.company))
+            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
         except (AFNoCompany, AFNoTitle):
             print(f"Company {args.company} not found")
             return
@@ -184,7 +180,7 @@ def main():
 
     elif args.cmd == "fraud":
         try:
-            c = Company.get_or_fetch(object_id=resolve_alias(args.company))
+            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
         except (AFNoCompany, AFNoTitle, AFCompanyError):
             print("No such company (geo or no 2gis reviews)")
             return

@@ -3,6 +3,7 @@ name = "antifraud2gis"
 version = "0.1.2"
 dependencies = [
     "requests",
+    "requests-cache",
     "loguru",
     "rich",
     "argalias",

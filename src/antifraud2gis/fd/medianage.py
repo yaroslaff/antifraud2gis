@@ -3,9 +3,9 @@ import numpy as np
 
 
 from .fd import BaseFD
-from ..user import User
-from ..company import Company
-from ..review import Review
+from ..models.author import Author
+from ..models.company import Company
+from ..models.review import Review
 from ..settings import settings
 from ..logger import logger
 
@@ -31,10 +31,10 @@ class MedianAgeFD(BaseFD):
         if empty:
             return
 
-        u = cr.user
+        author = cr.author
 
-        self.agerate = np.vstack([self.agerate, [cr.user_age, cr.rating]])
-        self.records.append(f"{u.public_id} {cr.rating} ({u.name} {cr.created_str} - {u.birthday_str}) = {cr.user_age}")
+        self.agerate = np.vstack([self.agerate, [cr.author_age, cr.rating]])
+        self.records.append(f"{author.public_id} {cr.rating} ({author.name} {cr.created_str} - {author.birthday_str}) = {cr.author_age}")
         self.processed += 1
 
     def get_score(self):

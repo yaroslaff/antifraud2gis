@@ -1,7 +1,7 @@
 import argparse
 
-from ..company import CompanyList, Company
-from ..user import User
+from ..models.company import CompanyList, Company
+from ..models.user import Author
 
 def add_user_parser(subparsers):
 
@@ -15,7 +15,7 @@ def add_user_parser(subparsers):
 def handle_user(args: argparse.Namespace):
     cmd = args.cmd
     cl = CompanyList()
-    u = User(args.uid)
+    u = Author(args.uid)
     cmd = args.cmd
 
     if cmd == "info":

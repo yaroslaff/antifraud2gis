@@ -14,11 +14,11 @@ from collections import defaultdict
 from ..logger import logger
 
 from ..const import LMDB_MAP_SIZE
-from ..company import Company, CompanyList
+from ..models.company import Company, CompanyList
 from ..fraud import detect
 from ..db import db
 from ..settings import settings
-from ..user import User
+from ..models.author import Author
 
 def add_summary_parser(subparsers):
     sum_parser = subparsers.add_parser("summary", help="Operations with whole database")

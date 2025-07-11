@@ -14,6 +14,8 @@ class Settings():
         self.storage = Path("~/.af2gis-storage").expanduser()
 
         self.dburl = "sqlite:///" + str(self.storage / "db.sqlite3")
+        self.requests_cache_path = str(self.storage / "cache.sqlite3")
+        self.requests_cache_expire = 3600 * 24 * 30
                                             
         self.user_storage = self.storage / "users"
         # self.lmdb_storage = self.storage / "db.lmdb"

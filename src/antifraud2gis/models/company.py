@@ -19,22 +19,24 @@ from rich.pretty import pretty_repr
 from requests.exceptions import RequestException
 from typing import Generator
 
-from sqlalchemy import Column, String, Text, Integer, Float, ForeignKey, func
+from datetime import datetime, timezone
+
+from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, func
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor, Session
 
-from .settings import settings
-from .const import DATAFORMAT_VERSION, SLEEPTIME, WSS_THRESHOLD, LOAD_NREVIEWS, REVIEWS_KEY, LMDB_MAP_SIZE
-from .user import User, get_user
+from ..settings import settings
+from ..const import DATAFORMAT_VERSION, SLEEPTIME, WSS_THRESHOLD, LOAD_NREVIEWS, REVIEWS_KEY, LMDB_MAP_SIZE
+from .author import Author
 # from .review import Review
-from .session import session
-from .exceptions import AFNoCompany, AFNoTitle, AFCompanyError, AFCompanyNotFound
-from .aliases import resolve_alias
-from .statistics import statistics
-from .aliases import aliases, resolve_alias
-from .db import db
-from .companydb import dbsearch
-from .base import Base
-from .dbsession import get_db_session
+from ..session import http_session
+from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError, AFCompanyNotFound
+from ..aliases import resolve_alias
+from ..statistics import statistics
+from ..aliases import aliases, resolve_alias
+from ..db import db
+from ..companydb import dbsearch
+from ..base import Base
+from ..dbsession import scoped_db_session
 
 # to avoid circular import
 #class RelationDict:
@@ -50,8 +52,12 @@ class Company(Base):
     object_id = Column(String, primary_key=True)
     title = Column(String, nullable=False)
     city = Column(String, nullable=False)
-    address = Column(String, nullable=False)
+    address = Column(String, nullable=True) # Null only for error companies, e.g. geo
     error = Column(String, nullable=True)
+
+
+    # datetime of full load (or last update)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
     count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
     branch_count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
@@ -64,21 +70,27 @@ class Company(Base):
     @reconstructor
     def reconstructor(self):
         self.report_path = settings.company_storage / (self.object_id + '-report.json.gz')
+        self.explain_path = settings.company_storage / (self.object_id + '-explain.txt.gz')
 
 
     #def __init__(self):
     #    print("zzz company init")
 
     @classmethod
-    def get_or_fetch(cls, object_id: str, dbsession=None) -> "Company":        
-        dbsession = dbsession or get_db_session()
+    def get_or_fetch(cls, object_id: str, dbsession=None, full=True) -> "Company":        
+        dbsession = dbsession or scoped_db_session()
         # Try to load from DB
-        company = dbsession.get(cls, object_id)
-        if company and company.rating_2gis is not None:
-            return company
-        
 
-        c = cls.fetch(object_id, dbsession=dbsession)
+        company = dbsession.get(cls, object_id)
+        if company:
+            # we have record but maybe incomplete
+            if full:
+                if company.updated_at:
+                    return company
+            else:
+                return company
+
+        c = cls.fetch(object_id, dbsession=dbsession, full=full)
         
         # Try to load from DB AGAIN
         # c = dbsession.get(cls, object_id)
@@ -91,7 +103,7 @@ class Company(Base):
         return self.rating_2gis is not None
 
     def full_load(self, dbsession: Optional[Session] = None):
-        dbsession = dbsession or get_db_session()
+        dbsession = dbsession or scoped_db_session()
 
         if self.is_loaded():
             return
@@ -100,7 +112,11 @@ class Company(Base):
         Company.fetch(object_id=self.object_id, dbsession=dbsession)
 
     @classmethod
-    def fetch(cls, object_id: str, dbsession) -> "Company":
+    def fetch(cls, object_id: str, full=False, dbsession=None) -> "Company":
+
+        from .review import Review
+        dbsession = dbsession or scoped_db_session()
+        print(f"FETCH {object_id} full: {full}")
 
         """ Fetch ALL reviews for company (all users) + update meta """
 
@@ -109,6 +125,9 @@ class Company(Base):
         meta = None
 
         page=0
+
+        ext_reviews = list()
+
         while url:
             if ':8080' in url:
                 logger.debug(f'strip :8080 from {url}')
@@ -118,7 +137,7 @@ class Company(Base):
             while r is None:
 
                 try:                    
-                    r = session.get(url)
+                    r = http_session.get(url)
                 except RequestException as e:
                     print("RequestException", e)
                     time.sleep(1)
@@ -128,6 +147,10 @@ class Company(Base):
                 raise NotImplementedError
 
             r.raise_for_status()
+
+            if r.from_cache:
+                logger.debug(f"CACHED {url}")
+
             data = r.json()
 
             if meta is None:
@@ -135,7 +158,18 @@ class Company(Base):
 
             for r in data['reviews']:
                 public_id = r['user']['public_id']
-                u = User.get_or_fetch(public_id=public_id, dbsession=dbsession)
+
+                if public_id is not None:
+                    u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
+
+                    if not full:
+                        # maybe we can skip here?
+                        company = dbsession.get(cls, object_id)
+                        if company:
+                            print(f"Short-loaded {object_id}")
+                            return company
+                else:
+                    ext_reviews.append(r)
 
             # self._reviews.extend(data['reviews'])
             url = data['meta'].get('next_link')
@@ -145,15 +179,33 @@ class Company(Base):
             page+=1
         
 
+        # loaded all pages
         company = dbsession.get(cls, object_id)
         if company is None:
             raise AFNoCompany
 
+        if ext_reviews:
+            print(f"Save {len(ext_reviews)} external review(s)")
+            for _r in ext_reviews:
+                # print_json(data=_r)
+
+                _review = Review(
+                    id=_r['id'],
+                    author=None,
+                    company=company,
+                    _name = _r['user']['name'],
+                    provider=_r['provider'],
+                    rating=_r['rating'],
+                    created = datetime.fromisoformat(_r['date_created'])
+                )
+                dbsession.add(_review)
+            dbsession.commit()
 
         if company.rating_2gis is None:
             company.count_2gis = meta['total_count']
             company.branch_count_2gis = meta['branch_reviews_count']
             company.rating_2gis = meta['branch_rating']
+            company.updated_at = datetime.now(tz=timezone.utc)
 
             dbsession.add(company)
             dbsession.commit()
@@ -358,7 +410,7 @@ class Company(Base):
             uid = r['user']['public_id']
             if uid is None:
                 continue
-            yield User(uid)
+            yield Author(uid)
 
     def users_ids(self):
         for r in self._reviews:
@@ -413,7 +465,7 @@ class Company(Base):
             while r is None:
 
                 try:                    
-                    r = session.get(url)
+                    r = http_session.get(url)
                 except RequestException as e:
                     print("RequestException", e)
                     time.sleep(1)
@@ -533,7 +585,7 @@ class Company(Base):
     def nreviews(self, provider = None, dbsession = None):
         from .review import Review
 
-        dbsession = dbsession or get_db_session()
+        dbsession = dbsession or scoped_db_session()
 
         if provider is None:
             return dbsession.query(func.count(Review.id))\

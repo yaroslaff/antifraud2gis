@@ -14,27 +14,27 @@ from rich.progress import Progress
 
 from typing import Optional
 
+from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
 from .db import db
 from .const import WSCORE_THRESHOLD, WSCORE_HITS_THRESHOLD, MAX_USER_REVIEWS
 from .logger import logger
-from .company import Company, CompanyList
+from .models.company import Company, CompanyList
 from .companydb import update_company, get_by_oid, check_by_oid
-from .user import User, get_user
+from .models.author import Author
 from .relation import RelationDict
 from .settings import settings
 from .exceptions import AFReportNotReady, AFNoCompany, AFReportAlreadyExists
 # from .usernotes import Usernotes
 from .fd.master import MasterFD
-from .dbsession import get_db_session
+from .dbsession import scoped_db_session
 
-def detect(c: Company, cl: CompanyList, explain: bool = False, force=False, dbsession: Session = None):
+def detect(c: Company, cl: CompanyList, dbsession: Session, explain: bool = False, force=False):
 
     debug_oids = os.getenv("DEBUG_OIDS", "").split(" ")
     debug_uids = os.getenv("DEBUG_UIDS", "").split(" ")
 
-    print("detect", c)
 
     # notes = Usernotes()
 
@@ -90,7 +90,12 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False, dbse
     with Progress() as progress:
         task = progress.add_task("[cyan]Analyzing user's reviews...", total=c.nreviews())
 
-        for idx, cr in enumerate(c.reviews(), start=1):
+        for idx, cr in enumerate(c.reviews, start=1):
+            # cr = dbsession.merge(cr)
+
+            # insp = inspect(cr)
+
+
             # notes.counter('total_reviews')
             progress.update(task, advance=1, description=f"[green]User {idx}")
 
@@ -112,19 +117,19 @@ def detect(c: Company, cl: CompanyList, explain: bool = False, force=False, dbse
         with gzip.open(c.explain_path, "wt") as fh:            
             master_detector.explain(fh=fh)
 
-    c.trusted = score['trusted']
-    c.detections = [ dline.split(' ')[0] for dline in score['detections'] ]
-    c.save_basic()
+    if False:
+        c.trusted = score['trusted']
+        c.detections = [ dline.split(' ')[0] for dline in score['detections'] ]
+        c.save_basic()
 
-
-    update_company(c.export())
+        update_company(c.export())
 
     logger.info(f"DETECTION RESULT {c}")
     return score
 
 
 def dump_report(object_id: str, dbsession: Optional[Session] = None):
-    dbsession = dbsession or get_db_session()
+    dbsession = dbsession or scoped_db_session()
 
     c = Company.get_or_fetch(object_id, dbsession=dbsession)
     if c.error:
@@ -147,7 +152,7 @@ def dump_report(object_id: str, dbsession: Optional[Session] = None):
 
     console = Console()
     table = Table(show_header=True, header_style="bold magenta", title=table_title)
-    table.add_column("T", style='red')
+    # table.add_column("T", style='red')
     table.add_column("Company name")
     table.add_column("Town")
     table.add_column("ID/Alias")
@@ -157,12 +162,7 @@ def dump_report(object_id: str, dbsession: Optional[Session] = None):
     table.add_column("Rating")
 
     for rel in report['relations']:
-        _c = Company(rel['oid'])
-
-        if rel['risk']:
-            tags_cell = Text(f"{rel['tags'] or ''}*")
-        else:
-            tags_cell = rel['tags']
+        _c = Company.get_or_fetch(object_id=rel['oid'], full=False, dbsession=dbsession)
 
         if rel['hits'] >= settings.risk_hit_th:
             hits_cell = Text(f"{rel['hits']}", style='red')
@@ -179,7 +179,7 @@ def dump_report(object_id: str, dbsession: Optional[Session] = None):
         else:
             rating_cell = Text(f"{rel['arating']:.1f} {rel['brating']:.1f}")
 
-        table.add_row(tags_cell, _c.get_title(), _c.get_town(), _c.alias or Text(_c.object_id, style='grey30'), hits_cell,
+        table.add_row( _c.get_title(), _c.get_town(), Text(_c.object_id, style='grey30'), hits_cell,
                         # f"{rel.mean:.1f}", 
                         median_cell, rating_cell)
     print()

@@ -1,34 +1,38 @@
 from typing import Optional
 
-from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Float, Integer, ForeignKey
+from sqlalchemy.orm import Session, Mapped, mapped_column, relationship
+from sqlalchemy import String, Text, Float, Integer, DateTime, ForeignKey
 
-import datetime
+from datetime import datetime, timezone
 from rich import print_json
 
-from .user import User
+from .author import Author
 from .company import Company
-from .base import Base
-
+from ..base import Base
+from ..dbsession import DBSession
 
 class Review(Base):
 
     __tablename__ = "review"
 
     id: Mapped[str] = mapped_column(String, primary_key=True)
-    user_id: Mapped[str] = mapped_column(ForeignKey("user.public_id", ondelete="CASCADE"), index=True, nullable=False)
+    # user_id could be null if external review
+    author_id: Mapped[str] = mapped_column(ForeignKey("author.public_id", ondelete="CASCADE"), index=True, nullable=True)
     object_id: Mapped[str] = mapped_column(ForeignKey("company.object_id", ondelete="CASCADE"), index=True, nullable=False)
+    # user name
+    _name: Mapped[str] = mapped_column(Text, nullable=True)
     provider: Mapped[str] = mapped_column(Text)
     rating: Mapped[int] = mapped_column(Integer, nullable=False)
+    created: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    user: Mapped[User] = relationship(back_populates="reviews")
+    author: Mapped[Author] = relationship(back_populates="reviews")
     company: Mapped[Company] = relationship(back_populates="reviews")
 
     # _user: 'User'
 
-    def __init__( self,
+    def __old_init1__( self,
         id: str,
-        user: Optional[User] = None,
+        user: Optional[Author] = None,
         user_id: Optional[str] = None,
         company: Optional[Company] = None,
         object_id: Optional[str] = None,
@@ -42,9 +46,9 @@ class Review(Base):
         # Handle user assignment
         if user is not None:
             self.user = user
-            self.user_id = user.public_id
+            self.author_id = user.public_id
         elif user_id is not None:
-            self.user_id = user_id
+            self.author_id = user_id
         else:
             raise ValueError("Either user object or user_id must be provided")
             
@@ -75,7 +79,7 @@ class Review(Base):
 
         self._user = None
         self._company = company
-        self.user_age = None
+        self.author_age = None
 
         date = data.get('date_created') or data['created']
 
@@ -96,11 +100,36 @@ class Review(Base):
 
         self.title, self.address = Company.resolve_oid(self.object_id)
 
-    def set_user(self, user):
+    def UNUSED_set_user(self, user):
         self._user = user
         if self._user.birthday():
             # set only for public profile
-            self.user_age = (self.created - self._user.birthday()).days
+            self.author_age = (self.created - self._user.birthday()).days
+
+
+    @property
+    def name(self) -> str:
+        if self._name:
+            return self._name
+        else:
+            return self.author.name
+
+    @property
+    def age(self) -> int:
+        created = self.created
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+
+        return (datetime.now(timezone.utc) - created).days
+
+    @property
+    def author_age(self) -> int | None:
+        if self.author is None:
+            return None
+
+        return (self.created - self.author.first_review()).days
+
+        # return user_age(self._user.birthday(), self.created)
 
 
     @property
@@ -108,9 +137,9 @@ class Review(Base):
         return self.created.strftime("%Y-%m-%d")
 
     @property    
-    def get_user(self) -> 'User': 
+    def get_user(self) -> 'Author': 
         if not self._user:
-            from .user import User, get_user
+            from .user import Author, get_user
             user = get_user(self.uid)
             self.set_user(user)
 
@@ -122,12 +151,12 @@ class Review(Base):
 
 
     def is_empty(self):
-        if self.uid is None:
+        if self.author_id is None:
             return True
 
-        self.user.load()
-        if self.user.nreviews() <= 1:            
-            return True
+        with DBSession() as dbsession:
+            if self.author.nreviews() <= 1:
+                return True
         
         return False
 
@@ -139,6 +168,6 @@ class Review(Base):
 
     def __repr__(self):
         # print_json(data=self._data)
-        from .user import User
+        from .user import Author
 
         return f'Review({self.provider} {self.user} {self.rating} > {self.company})'

@@ -23,7 +23,7 @@ from dramatiq import get_broker
 
 from rich import print_json
 
-from ..company import Company, CompanyList
+from ..models.company import Company, CompanyList
 from ..exceptions import AFReportNotReady, AFNoCompany, AFNoTitle, AFCompanyError
 from ..tasks import submit_fraud_task, get_qsize
 from ..settings import settings

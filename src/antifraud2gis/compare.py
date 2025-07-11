@@ -2,8 +2,8 @@ import os
 import sys
 import numpy as np
 
-from .company import Company
-from .user import get_user
+from .models.company import Company
+# from .user import get_user
 from .db import db
 from .settings import settings
 

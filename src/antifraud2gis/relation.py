@@ -1,8 +1,8 @@
-from .company import Company
+from .models.company import Company
 from .settings import settings
 from .exceptions import AFNoCompany, AFCompanyError
 from .logger import logger
-from .review import Review
+from .models.review import Review
 import os
 import numpy as np
 from collections import defaultdict
@@ -26,7 +26,7 @@ class Relation:
 
     a: Company
     b: str
-    _users: set
+    _authors: set
     nusers: int
     mean: float
     median: float
@@ -42,7 +42,7 @@ class Relation:
         self.b = b
         self.count = 0
         self._calculated = False
-        self._users = set()
+        self._authors = set()
         self._aratings = list()
         self._bratings = list()
         self.nusers = 0
@@ -53,15 +53,15 @@ class Relation:
         self.btitle = None
         self.baddr = None
 
-    def add_user(self, user, a_rating, b_rating):
+    def add_user(self, author, a_rating, b_rating):
         global users_added
-        if user in self._users:
+        if author in self._authors:
             # print(f"ALREADY EXISTS {user} for {self.b}")
             pass
-        self._users.add(user)
+        self._authors.add(author)
         self._aratings.append(a_rating)
         self._bratings.append(b_rating)
-        self.nusers = len(self._users)
+        self.nusers = len(self._authors)
         users_added += 1
 
     def calc(self):
@@ -70,7 +70,7 @@ class Relation:
 
         user_reviews = list()
 
-        for u in self._users:
+        for u in self._authors:
             user_reviews.append(u.nreviews())
 
         if not user_reviews:
@@ -96,7 +96,7 @@ class Relation:
         self.count += 1
     
     def users(self):
-        for u in self._users:
+        for u in self._authors:
             yield u
 
 
@@ -159,16 +159,16 @@ class Relation:
         if not self._calculated:
             self.calc()
         bcompany = Company(self.b)
-        return f"{bcompany.get_title()} ({bcompany.address}): hits: {len(self._users)}/{self.count} mean: {self.mean} median: {self.median})"
+        return f"{bcompany.get_title()} ({bcompany.address}): hits: {len(self._authors)}/{self.count} mean: {self.mean} median: {self.median})"
 
     def hit(self, arating: int, r: Review):
         """ add review to relation """
         self.inc()
-        self.add_user(r.user, arating, r.rating)
+        self.add_user(r.author, arating, r.rating)
 
         if self.btitle is None:
-            self.btitle = r.title
-            self.baddr = r.address
+            self.btitle = r.company.title
+            self.baddr = r.company.address
             # print(f'hit rel to {self.b} {self.btitle} ({self.baddr})')
 
 
@@ -324,15 +324,15 @@ class RelationDict:
                 continue
 
             try:
-                _c = Company(rel.b)
+                _c = Company.get_or_fetch(rel.b)
             except (AFNoCompany, AFCompanyError):
                 # print(f"Ignore NO-COMPANY {rel.b} with {rel.count} hits")
                 continue
             data = dict()
-            data['tags'] = _c.tags
+            # data['tags'] = _c.tags
             data['title'] = _c.get_title()
             data['town'] = _c.get_town()
-            data['alias'] = _c.alias
+            # data['alias'] = _c.alias
             data['oid'] = _c.object_id
             data['hits'] = rel.count
             data['median'] = rel.median

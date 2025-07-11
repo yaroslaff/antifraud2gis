@@ -18,9 +18,10 @@ import json
 import gzip
 # import lmdb
 
-from ..company import CompanyList, Company
-from ..user import User, reset_user_pool
-from ..review import Review
+from ..models.company import CompanyList, Company
+from ..models.user import Author
+# , reset_user_pool
+from ..models.review import Review
 from ..settings import settings
 from ..fraud import detect, dump_report
 from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError
@@ -31,11 +32,11 @@ from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_L
                         REDIS_DRAMATIQ_QUEUE, REVIEWS_KEY, \
                         LMDB_MAP_SIZE, REDIS_WORKER_STARTED
 from ..logger import logger
-from ..session import session
+from ..session import http_session
 from ..utils import random_company
 from ..companydb import update_company, check_by_oid, get_by_oid, dbsearch, dbtruncate, make_connection
 from ..db import db
-from ..dbsession import get_db_session
+from ..dbsession import DBSession
 
 def countdown(n=5):
     for i in range(n, 0, -1):
@@ -44,229 +45,15 @@ def countdown(n=5):
     print()
 
 
-def reinit(cl: CompanyList):
-
-    for path in [ settings.storage, settings.company_storage, settings.user_storage]:
-        if not path.exists():
-            print(f"Create {path}")
-            path.mkdir()
-
-    
-    deleted_reports = 0
-    for c in cl.companies():
-        if c.report_path.exists():
-            c.report_path.unlink()
-            deleted_reports += 1
-    print(f"deleted {deleted_reports} old reports")
-
-
-    for oid, data in aliases.items():
-        c = Company(oid)
-        c.load_basic_from_network()
-        if 'alias' in data:
-            c.alias = data['alias']
-            print(c)
-        if 'tags' in data:
-            c.tags = data['tags']
-        c.save_basic()
-
-
-def findnew():
-
-    found = False
-
-    # read random user
-    cl = CompanyList()
-    files = [f for f in settings.user_storage.iterdir() if f.is_file()]
-
-    while not found:
-        uid = random.choice(files).name.split('-')[0]
-        u = User(uid)
-        for r in u.reviews():
-            print(r)
-            try:
-                c = cl[r.oid]
-                print("Exist:", c)
-            except KeyError as e:
-                try:
-                    c = Company(r.oid)
-                except (AFNoCompany, AFNoTitle) as e:
-                    continue
-                detect(c, cl)
-                dump_report(r.oid)
-                found = True
-    
-    printsummary(cl)
-
+def reinit():
+    raise NotImplementedError
 
 
 def handle_dev(args: argparse.Namespace):
     cmd = args.cmd
-    cl = CompanyList()
 
-    total = 0
-    errors = 0
-
-    if cmd == "delerror":
-        if args.real:
-            print("Running in REAL mode")
-            if not args.now:
-                countdown()
-        else:
-            print("Running in dry run mode")
-
-        for c in cl.companies():
-            total += 1
-            if c.error is not None:
-                print("deleting", c)
-                c.delete()
-                errors += 1
-        print(f"Total/Err: {total} / {errors} ")
-
-    elif cmd == "reinit":
-        if args.real:
-            print("Running in REAL mode")
-            if not args.now:
-                countdown()
-            reinit(cl)
-        else:
-            print("Running in dry run mode")
-
-    elif cmd == "findnew":
-        findnew()
-    elif cmd == "tmp":
-        # check users age for review
-        u = User(args.args[0])
-        print(u.birthday())
-
-
-
-def town_iterator(town: str, nreviews: int):
-    for crec in dbsearch(query='', addr=town, nreviews=nreviews, limit=0):
-        yield crec
-
-
-def nreviews_for_oid(r, oid: str, provider:str):
-    key = f'af2gis:nreviews:{oid}:{provider}'
-    nr = r.get(key)
-    if nr is not None:
-        return int(nr)
-    
-    # calculate and save
-    c = Company(oid)
-    c.load_reviews()
-    nr = c.nreviews(provider=provider)
-    r.set(key, nr)
-    return nr
-
-def do_delkeys(prefix: str):
-    r = redis.Redis(decode_responses=True)
-    for key in r.scan_iter(f"{prefix}*"):
-        print("delete", key)
-        r.delete(key)
-
-
-def do_provider(args, cl: CompanyList):
-
-    redis_conn = redis.Redis(decode_responses=True)
-
-    try:
-        min_nprov_th = int(args.args[1])
-    except IndexError:
-        min_nprov_th = 20
-
-    try:
-        th = int(args.args[2])
-    except IndexError:
-        th = 0
-
-
-    started = time.time()
-    provider = args.args[0]
-    print(f"# Analyse companies with {min_nprov_th}+ reviews from {provider}, show companies with more then {th}% reviews from {provider}")
-
-    processed = 0
-    provider_ratio = list()
-    over_th = 0
-    higher = 0
-    lower = 0
-
-    all_providers = defaultdict(int)
-
-    for crec in town_iterator(args.town, nreviews=100):
-
-        if crec['oid'] in settings.skip_oids:
-            continue
-        try:
-            crec['provider_nr'] = nreviews_for_oid(redis_conn, crec['oid'], provider=provider)        
-            if crec['provider_nr'] < min_nprov_th:
-                continue
-
-        except AFCompanyError as e:
-            continue
-
-        # here we start processing
-        nprov = 0
-        total = 0
-        ratio = 0 
-        prov_rating = list()
-        rating = list()
-        skipped = 0
-        c = Company(crec['oid'])
-        c.load_reviews()
-
-        
-
-
-        for rev in c.reviews():
-
-            total += 1
-
-            all_providers[rev.provider] += 1
-
-            if rev.provider == provider:
-                nprov += 1
-                prov_rating.append(rev.rating)
-            else:
-                rating.append(rev.rating)
-
-        # percent of this provider/total
-        ratio = int(100*nprov/total)
-
-        # avg rating other providers
-        avg = np.mean(rating) if rating else 0
-        # avg rating this provider
-        avg_prov = np.mean(prov_rating) if prov_rating else 0
-
-        
-        if avg_prov > avg:
-            higher += 1
-            hl_str = "HI"
-            if avg_prov > avg + settings.rating_diff:
-                hl_str = "HI+"
-        else:
-            lower += 1
-            hl_str = "LO"
-
-        processed += 1
-
-        if ratio > th:
-            over_th += 1
-            print(f"{processed}: {c.object_id} {c.get_title()} (skip:{skipped}) {hl_str} ({avg:.1f}) {provider}: {nprov} / {total} = {ratio} ({avg_prov:.1f})")
-            # print(f"  rating ({len(rating)}): {rating}")
-            # print(f"  {provider} rating ({len(prov_rating)}): {prov_rating}")
-
-
-
-    print(f"processed {processed} companies in {int(time.time() - started)} sec. providers: {dict(all_providers)}")
-    
-    if processed:
-        print(f"over th ({th}): {over_th} ({100*over_th/processed:.1f}%)")
-        
-        hilorate = higher/lower if lower else 0
-        print(f"hi: {higher} lo: {lower} hi/lo: {hilorate:.2f}")
-
-    return
+    print("args:", args)
+    raise NotImplementedError
 
 
 def get_args():
@@ -282,7 +69,7 @@ def get_args():
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['company-users', 'users', 'user-reviews', 'company-reviews', 'queue', 'explore', 'provider', 'sys', 'filldb', 'dev', 'convert', 'delkeys', 'dump'])
+    parser.add_argument("cmd", choices=['company-users', 'users', 'user-reviews', 'company-reviews', 'queue', 'sys', 'dev', 'dump'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--full", default=False, action='store_true')
     parser.add_argument("args", nargs='*', help='extra args')
@@ -303,12 +90,13 @@ def get_args():
     return parser.parse_args()
 
 def db_dump():
-    dbsession = get_db_session()
+    dbsession = DBSession()
     limit = 10
 
-    print(f"Users (up to {limit}/{dbsession.query(User).count()}):")
-    for idx, user in enumerate(dbsession.query(User).limit(limit).all()):
-        print(idx, user)
+    print(f"Users (up to {limit}/{dbsession.query(Author).count()}):")
+    print("Nusers:", Author.nusers(dbsession=dbsession))
+    for idx, user in enumerate(dbsession.query(Author).limit(limit).all()):
+        print(f"{idx}: {user} updated: {user.updated}")
     print()
 
     print(f"Companies (up to {limit}/{dbsession.query(Company).count()}):")
@@ -337,8 +125,8 @@ def main():
 
     elif cmd == "user-reviews":
         public_id = args.args[0]
-        dbsession = get_db_session()
-        u = User.get_or_fetch(public_id=public_id,dbsession=dbsession)
+        dbsession = scoped_db_session()
+        u = Author.get_or_fetch(public_id=public_id,dbsession=dbsession)
         for r in u.reviews:
             print(r)
 
@@ -352,7 +140,7 @@ def main():
 
 
     elif cmd == "users":
-        for u in User.users():
+        for u in Author.users():
             print(u)
 
     elif cmd == "queue":
@@ -425,7 +213,7 @@ def main():
         r = requests.get("https://ipinfo.io/ip", proxies={"https": None, "http": None})
         print(f"Direct IP: {r.text}")
 
-        r = session.get("https://ipinfo.io/ip")
+        r = http_session.get("https://ipinfo.io/ip")
         print(f"Session IP: {r.text}")
 
         if args.args:
@@ -443,7 +231,7 @@ def main():
             print(f"Direct HTTP reviews request error: {e}")
         
         try:
-            r = session.get(testurl, timeout=3)
+            r = http_session.get(testurl, timeout=3)
             print(f"Session HTTP response code: {r.status_code}")
         except requests.exceptions.RequestException as e:
             print(f"Direct HTTP reviews request error: {e}")
@@ -453,86 +241,13 @@ def main():
         print(f"Meta code: {data['meta']['code']}, rating:{data['meta']['branch_rating']} count: {data['meta']['branch_reviews_count']}/{data['meta']['total_count']}")
         print(f"Reviews: {len(data['reviews'])}")
 
-    elif cmd == "filldb":
-
-        if args.overwrite:
-            dbtruncate()
-
-        inserted = 0
-        started = time.time()
-        for c in cl.companies(oid=args.company, name=args.name, town=args.town, report=args.report, noreport=args.noreport):
-                inserted += 1
-                print(f"{inserted} add {c.object_id} {c.title}")
-                update_company(c.export())
-                if inserted % 100 == 0:
-                    print(f"+++ Inserted {inserted} companies in {int(time.time() - started)} seconds")
-
-        print(f"Done. Inserted {inserted} records, already exists.")
-
-    elif cmd == "provider":
-        do_provider(args, cl)
-
-    elif cmd == "explore":
-
-        if args.town is None:
-            print("Need a town to explore")
-            return
-
-        town = args.town.lower()
-        submitted = 0
-
-        print("total users:", User.nusers())
-        
-        total_users=User.nusers()
-
-        for idx, u in enumerate(User.users()):
-            
-            if idx % 1000 == 0:
-                print(f"Processed {idx}/{total_users} users")
-
-            cooldown_queue(10)
-
-            for rev in u.reviews():
-                if rev.get_town().lower() != town:
-                    continue
-
-                if db.is_nocompany(rev.oid):
-                    # logger.info(f"Skip nocompany (in db) {rev.oid} {rev.title}")
-                    continue
-
-                if not cl.company_exists(rev.oid):
-                    cooldown_queue(10)
-                    try:
-                        c = Company(rev.oid)
-                    except (AFNoCompany, AFNoTitle) as e:
-                        # logger.info(f"AFNoCompany {rev.oid} {rev.title}")
-                        db.add_nocompany(rev.oid)
-                        continue
-
-                    logger.info(f"{submitted}: new company {rev.get_town()} {rev.oid} {rev.title}")
-                    submit_fraud_task(rev.oid)
-
-                    submitted += 1
-
-                    if submitted % 20 == 0:
-                        reset_user_pool()
-
-                if stopfile.exists():
-                    logger.info("Stopfile found, exit")
-                    stopfile.unlink()
-                    return
-        else:
-            print(f"Finished. Last used: {idx} submitted: {submitted}")
-
     elif cmd == "dev":
+        handle_dev(args=args)
         return
         
-
     elif cmd == "dump":
         db_dump()        
 
-    elif cmd == "delkeys":
-        do_delkeys(args.args[0])
     else:
         print(f"Unknown command {cmd!r}")
 
