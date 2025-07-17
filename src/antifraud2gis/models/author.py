@@ -153,7 +153,7 @@ class Author(Base):
             r = http_session.get(url)
 
             if r.status_code == 403:
-                logger.debug(f"404 but profile {public_id} is NOT private. We should not get here.") 
+                logger.debug(f"404 but profile {public_id} is private. We should not get here.") 
                 # it's possible sometimes
                 raise NotImplementedError
 
@@ -294,5 +294,8 @@ class Author(Base):
 
 
     def __repr__(self):
-        return f'User({self.name} {self.created.date()} {self.url})'
+        tags=""
+        if self.private:
+            tags += "[PRIVATE]"
+        return f'Author({self.name!r} {self.public_id} {self.url} {tags} {self.created.date()})'
 

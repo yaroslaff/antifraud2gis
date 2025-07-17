@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sqlalchemy.orm import Session, Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Float, Integer, DateTime, ForeignKey
+from sqlalchemy import String, Text, Float, Integer, DateTime, ForeignKey, select, exists
 
 from datetime import datetime, timezone
 from rich import print_json
@@ -107,6 +107,12 @@ class Review(Base):
             self.author_age = (self.created - self._user.birthday()).days
 
 
+    @classmethod
+    def exists(cls, review_id: str, dbsession: Session) -> bool:
+        stmt = select(exists().where(cls.id == review_id))
+        return bool(dbsession.scalar(stmt))
+
+
     @property
     def name(self) -> str:
         if self._name:
@@ -168,6 +174,6 @@ class Review(Base):
 
     def __repr__(self):
         # print_json(data=self._data)
-        from .user import Author
+        from .author import Author
 
-        return f'Review({self.provider} {self.user} {self.rating} > {self.company})'
+        return f'Review({self.provider} {self.author} {self.rating} > {self.company})'

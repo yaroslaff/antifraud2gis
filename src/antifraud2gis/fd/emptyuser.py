@@ -31,8 +31,7 @@ class EmptyUserFD(BaseFD):
             if self._explain:
 
                 if cr.author is None:
-                    # use names in review for user is none
-                    print("rev from:", cr.name)
+                    # use names in review for user is none                    
                     self.records.append(f"NONE {cr.created_str} {cr.rating } {cr.provider} uid:{cr.author_id} {cr.name} ")
                 else:
                     author = cr.author

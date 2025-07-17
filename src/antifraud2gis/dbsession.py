@@ -30,7 +30,6 @@ def db_session() -> Session:
 
 
 def dbsession_init():
-    print("DBSESSION INIT")
     scoped_db_session()
     db_session()
 

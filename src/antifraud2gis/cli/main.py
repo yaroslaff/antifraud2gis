@@ -106,7 +106,6 @@ def createdb():
 def check_or_create_db():
 
     with DBSession() as dbsession:
-        print(dbsession)
         try:
             # n_users = dbsession.query(User).count()
             n_users = Author.nusers(dbsession=dbsession)
@@ -136,10 +135,7 @@ def main():
         print(f"Stopfile {stopfile} created")
 
     elif args.cmd == "summary":
-        if args.fmt == 'full':
-            printsummary(cl=cl, full=True)
-        else:
-            printsummary(cl=cl, full=False)
+        printsummary()
 
     elif args.cmd == "aliases":
         for oid, alias_rec in aliases.items():
@@ -156,13 +152,13 @@ def main():
         c2 = cl[args.args[1]]
         compare(c1, c2)
 
-    elif args.cmd == "info":       
+    elif args.cmd == "info":
         try:
-            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
+            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession, full=False)
         except (AFNoCompany, AFNoTitle):
             print(f"Company {args.company} not found")
             return
-        print(c)
+        print(c.info(dbsession=dbsession))
         
     elif args.cmd == "search":
         try:

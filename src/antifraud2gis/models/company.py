@@ -77,6 +77,14 @@ class Company(Base):
     #    print("zzz company init")
 
     @classmethod
+    def get(cls, object_id: str, dbsession: Session) -> "Company":
+        # resolve alias
+        object_id = resolve_alias(object_id)
+        company = dbsession.get(cls, object_id)
+        return company
+
+
+    @classmethod
     def get_or_fetch(cls, object_id: str, dbsession=None, full=True) -> "Company":        
         dbsession = dbsession or scoped_db_session()
         # Try to load from DB
@@ -185,27 +193,32 @@ class Company(Base):
             raise AFNoCompany
 
         if ext_reviews:
-            print(f"Save {len(ext_reviews)} external review(s)")
+            saved_ext_reviews = 0
             for _r in ext_reviews:
-                # print_json(data=_r)
 
-                _review = Review(
-                    id=_r['id'],
-                    author=None,
-                    company=company,
-                    _name = _r['user']['name'],
-                    provider=_r['provider'],
-                    rating=_r['rating'],
-                    created = datetime.fromisoformat(_r['date_created'])
-                )
-                dbsession.add(_review)
+                if not Review.exists(_r['id'], dbsession=dbsession):
+                    _review = Review(
+                        id=_r['id'],
+                        author=None,
+                        company=company,
+                        _name = _r['user']['name'],
+                        provider=_r['provider'],
+                        rating=_r['rating'],
+                        created = datetime.fromisoformat(_r['date_created'])
+                    )
+                    dbsession.add(_review)
+                    saved_ext_reviews += 1
+
+            print(f"Saved {saved_ext_reviews}/{len(ext_reviews)} external review(s)")
+
             dbsession.commit()
 
-        if company.rating_2gis is None:
+        # if company.rating_2gis is None:
+        if True:
             company.count_2gis = meta['total_count']
             company.branch_count_2gis = meta['branch_reviews_count']
             company.rating_2gis = meta['branch_rating']
-            company.updated_at = datetime.now(tz=timezone.utc)
+            company.updated_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
 
             dbsession.add(company)
             dbsession.commit()
@@ -244,7 +257,7 @@ class Company(Base):
         self.explain_path = settings.company_storage / (object_id + '-explain.txt.gz')
         self.loaded_from_disk = False
 
-        self._reviews = list()
+        
         
         # basic info
         self.title = None
@@ -373,57 +386,26 @@ class Company(Base):
 
 
 
-    def load_reviews(self, local_only=False):
-        if self._reviews:
-            return
-        
-        if self.reviews_path.exists():
-            try:
-                with gzip.open(self.reviews_path, "rt") as f:
-                    # print(f"Load company reviews from {self.reviews_path} mtime: {int(self.reviews_path.stat().st_mtime)} sz: {self.reviews_path.stat().st_size}")
-                    self._reviews = json.load(f)
-                    self.count_rate()
-            except (gzip.BadGzipFile, OSError, zlib.error):
-                logger.error(f"Bad gzip file! {self.reviews_path}")
-                sys.exit(1)
-        else:
-            if not local_only:
-                self.load_reviews_from_network()
-        return len(self._reviews)
 
     def count_rate(self):
-        self.ratings = list()
-        for r in self._reviews:
-            if r['rating'] is None:
-                # 70000001006412601
-                # rating could be None e.g. when provider=4sq
-                continue
-            if r['rating'] is not None:
-                self.ratings.append(r['rating'])
+        raise NotImplementedError
 
-        if self.ratings:
-            self.rate = round(float(np.mean(self.ratings)), 2)
-        return(self.rate)
+    def authors(self):
+        for r in self.reviews:            
+            yield r.author
 
-    def users(self):
-        for r in self._reviews:
-            uid = r['user']['public_id']
-            if uid is None:
-                continue
-            yield Author(uid)
-
-    def users_ids(self):
+    def unused_users_ids(self):
         for r in self._reviews:
             yield r['user']['public_id']
 
-    def uids(self):
+    def unused_uids(self):
         for r in self._reviews:
             uid = r['user']['public_id']
             if uid is None:
                 continue
             yield uid
 
-    def load_users(self, until_resolve=False):
+    def unused_load_users(self, until_resolve=False):
         self.load_reviews()
         # print(f"load users from {len(self._reviews)} reviews")
         with Progress() as progress:
@@ -449,7 +431,7 @@ class Company(Base):
                         # print("resolved!", title, address)
                         return
 
-    def load_reviews_from_network(self):
+    def unused_load_reviews_from_network(self):
         url = f'https://public-api.reviews.2gis.com/2.0/branches/{self.object_id}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
         unused_geo = f'https://public-api.reviews.2gis.com/2.0/geo/141373143684284/reviews?limit=50&fields=meta.providers,meta.geo_rating,meta.geo_reviews_count,meta.total_count,reviews.hiding_reason&sort_by=friends&without_my_first_review=false&key={REVIEWS_KEY}&locale=ru_RU'
 
@@ -534,6 +516,9 @@ class Company(Base):
 
         return False
 
+
+    def info(self, dbsession: Session):
+        return f'{self} updated_at: {self.updated_at} reviews: {self.nreviews(dbsession=dbsession)}'
 
     def __repr__(self):
 

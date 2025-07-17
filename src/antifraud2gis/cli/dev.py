@@ -19,19 +19,19 @@ import gzip
 # import lmdb
 
 from ..models.company import CompanyList, Company
-from ..models.user import Author
+from ..models.author import Author
 # , reset_user_pool
 from ..models.review import Review
 from ..settings import settings
 from ..fraud import detect, dump_report
 from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError
-from ..aliases import aliases
+from ..aliases import resolve_alias
 from .summary import printsummary
 from ..tasks import submit_fraud_task, cooldown_queue
 from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_LIST, REDIS_WORKER_STATUS, REDIS_WORKER_STATUS_SET, \
                         REDIS_DRAMATIQ_QUEUE, REVIEWS_KEY, \
                         LMDB_MAP_SIZE, REDIS_WORKER_STARTED
-from ..logger import logger
+from ..logger import logger, loginit
 from ..session import http_session
 from ..utils import random_company
 from ..companydb import update_company, check_by_oid, get_by_oid, dbsearch, dbtruncate, make_connection
@@ -61,15 +61,19 @@ def get_args():
 
     aa = ArgAlias()
     aa.alias(["queue"], "q")
-    aa.alias(["company-users"], "cu")
-    aa.alias(["user-reviews"], "ur")
+    aa.alias(["company-authors"], "ca")
+    aa.alias(["company-reviews"], "cr")
+    aa.alias(["company-fetch"], "cf")
+
+    aa.alias(["author-reviews"], "ar")
+    aa.alias(["author-fetch"], "af")
     
     aa.skip_flags()
     aa.parse()
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['company-users', 'users', 'user-reviews', 'company-reviews', 'queue', 'sys', 'dev', 'dump'])
+    parser.add_argument("cmd", choices=['company-authors', 'authors', 'author-reviews', 'company-reviews', 'company-fetch', 'author-fetch', 'queue', 'sys', 'dev', 'dump'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--full", default=False, action='store_true')
     parser.add_argument("args", nargs='*', help='extra args')
@@ -114,34 +118,39 @@ def main():
     cl = CompanyList()
     stopfile = Path('~/.af2gis-stop').expanduser()
 
+    loginit("DEBUG" if args.verbose else "INFO")
+
     cmd = args.cmd
 
-    if cmd == "company-users":
-        c = cl[args.company]
-        print(c)
-        c.load_reviews()
-        for u in c.users():
-            print(u)
+    if cmd == "company-authors":
+        with DBSession() as dbsession:
+            object_id = resolve_alias(args.args[0])
 
-    elif cmd == "user-reviews":
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            print(f"# {c.info(dbsession=dbsession)}")
+            for r in c.authors():
+                print(r)
+
+    elif cmd == "author-reviews":
         public_id = args.args[0]
-        dbsession = scoped_db_session()
-        u = Author.get_or_fetch(public_id=public_id,dbsession=dbsession)
-        for r in u.reviews:
-            print(r)
+        with DBSession() as dbsession:
+            a = Author.get_or_fetch(public_id=public_id,dbsession=dbsession)
+            for r in a.reviews:
+                print(r)
 
 
     elif cmd == "company-reviews":
+        object_id = resolve_alias(args.args[0])
+        with DBSession() as dbsession:
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            for r in c.reviews:
+                print(r)
 
-        c = Company(args.company)
-        c.load_reviews()
-        for r in c.reviews():
-            print(r)
+    elif cmd == "company-fetch":
+        object_id = resolve_alias(args.args[0])
+        with DBSession() as dbsession:
+            c = Company.fetch(object_id=object_id, full=True, dbsession=dbsession)
 
-
-    elif cmd == "users":
-        for u in Author.users():
-            print(u)
 
     elif cmd == "queue":
         r = redis.Redis(decode_responses=True)
