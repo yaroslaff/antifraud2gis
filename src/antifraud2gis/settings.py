@@ -89,12 +89,12 @@ class Settings():
         self.create_directories()
 
     def create_directories(self):
-        if not self.user_storage.exists():
-            self.user_storage.mkdir(parents=True)
         if not self.company_storage.exists():
             self.company_storage.mkdir(parents=True)
 
         if False:
+            if not self.user_storage.exists():
+                self.user_storage.mkdir(parents=True)
             if not self.lmdb_storage.exists():
                 env = lmdb.open(self.lmdb_storage.as_posix(), map_size=LMDB_MAP_SIZE)
                 with env.begin(write=True):

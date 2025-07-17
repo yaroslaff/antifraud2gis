@@ -8,6 +8,14 @@ _engine = None
 ScopedDBSession = None
 DBSession = None
 
+class DebugSession(Session):
+    def commit(self):
+        import traceback
+        print("=== COMMIT CALLED ===")
+        traceback.print_stack(limit=5)  # покажет, кто вызвал
+        super().commit()
+
+
 def get_engine():
     global _engine
     if _engine is None:
@@ -25,7 +33,7 @@ def db_session() -> Session:
     global DBSession
     if DBSession is None:
         engine = get_engine()
-        DBSession = scoped_session(sessionmaker(bind=engine, autoflush=False, autocommit=False))
+        DBSession = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     return DBSession()
 
 

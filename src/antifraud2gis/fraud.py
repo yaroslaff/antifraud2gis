@@ -17,11 +17,10 @@ from typing import Optional
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from .db import db
 from .const import WSCORE_THRESHOLD, WSCORE_HITS_THRESHOLD, MAX_USER_REVIEWS
 from .logger import logger
 from .models.company import Company, CompanyList
-from .companydb import update_company, get_by_oid, check_by_oid
+
 from .models.author import Author
 from .relation import RelationDict
 from .settings import settings

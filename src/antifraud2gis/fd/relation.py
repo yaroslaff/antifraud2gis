@@ -4,12 +4,12 @@ import numpy as np
 
 from sqlalchemy import inspect
 
-from ..dbsession import scoped_db_session
+from ..dbsession import DBSession
 
 from .fd import BaseFD
 from ..models.author import Author
 from ..models.company import Company
-from ..companydb import get_by_oid
+
 from ..models.review import Review
 from ..settings import settings
 from ..relation import RelationDict
@@ -121,38 +121,39 @@ class RelationFD(BaseFD):
 
         # explain hirel
 
+        with DBSession() as dbsession:
+            for dline in self.score['detections']:
+                dname = dline.split()[0]
+                print(f"DETECTION: {dname}", file=fh)
 
-        for dline in self.score['detections']:
-            dname = dline.split()[0]
-            print(f"DETECTION: {dname}", file=fh)
+                if dname == 'happy_long_rel':                
+                    print(f"Towns ({len(self.towns)} >= {settings.happy_long_rel_min_towns}): {self.towns} ", file=fh)
+                    print(f"happy_long_rel is {len(self.towns)}/{self.happy_hirel} = {self.score['happy_long_rel']}% > {settings.happy_long_rel}", file=fh)
+                    print(file=fh)
 
-            if dname == 'happy_long_rel':                
-                print(f"Towns ({len(self.towns)} >= {settings.happy_long_rel_min_towns}): {self.towns} ", file=fh)
-                print(f"happy_long_rel is {len(self.towns)}/{self.happy_hirel} = {self.score['happy_long_rel']}% > {settings.happy_long_rel}", file=fh)
-                print(file=fh)
-
-            if dname == 'sametitle_rel':
-                print(f"Titles: {len(self.titles)}", file=fh)
-                print(f"Hirel ({self.happy_hirel} >= {settings.sametitle_rel}) and sametitle_rel {self.score['sametitle_rel']}% <= {settings.sametitle_ratio}%", file=fh)
-                print(f"sametitle_rel is {len(self.titles)}/{self.happy_hirel} = {self.score['sametitle_rel']}%", file=fh)
-                print(file=fh)
+                if dname == 'sametitle_rel':
+                    print(f"Titles: {len(self.titles)}", file=fh)
+                    print(f"Hirel ({self.happy_hirel} >= {settings.sametitle_rel}) and sametitle_rel {self.score['sametitle_rel']}% <= {settings.sametitle_ratio}%", file=fh)
+                    print(f"sametitle_rel is {len(self.titles)}/{self.happy_hirel} = {self.score['sametitle_rel']}%", file=fh)
+                    print(file=fh)
 
 
-            if dname == 'risk_users':
-                print(f"Risk users ({len(self.risk_users)} / {self.processed_users} > {settings.risk_user_ratio}%)", file=fh)
+                if dname == 'risk_users':
+                    print(f"Risk users ({len(self.risk_users)} / {self.processed_users} > {settings.risk_user_ratio}%)", file=fh)
 
-                for idx, public_id in enumerate(self.risk_users.keys(), start=1):
-                    u = Author.get_or_fetch(public_id)
-                    print(f"user #{idx}. {public_id} {u.name} ({len(self.risk_users[public_id])}):", file=fh)
-                    for oid in self.risk_users[public_id]:
-                        crec = get_by_oid(oid)
-                        if crec:
-                            print(f"    {oid} {crec['title']} {crec['address']}", file=fh)
-                        else:
-                            print(f"    {oid} [special-not-a-company]", file=fh)
-                
-                print(f"{len(self.risk_users)} / {self.processed_users} = {self.score['risk_users']}%", file=fh)
-                print("", file=fh)
+                    for idx, public_id in enumerate(self.risk_users.keys(), start=1):
+                        author = Author.get_or_fetch(public_id, dbsession=dbsession)
+                        print(f"author #{idx}. {public_id} {author.name} ({len(self.risk_users[public_id])}):", file=fh)
+                        for oid in self.risk_users[public_id]:
+                            
+                            _c = Company.get(oid, dbsession=dbsession)
+                            if _c:
+                                print(f"    {oid} {_c.title} {_c.address or ''}", file=fh)
+                            else:
+                                print(f"    {oid} [special-not-a-company]", file=fh)
+                    
+                    print(f"{len(self.risk_users)} / {self.processed_users} = {self.score['risk_users']}%", file=fh)
+                    print("", file=fh)
 
         for line in self.records:
             print(line, file=fh)

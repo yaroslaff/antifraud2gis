@@ -4,7 +4,7 @@ import numpy as np
 
 from .models.company import Company
 # from .user import get_user
-from .db import db
+
 from .settings import settings
 
 def quick_compare(a: Company, b: Company, fh = None):

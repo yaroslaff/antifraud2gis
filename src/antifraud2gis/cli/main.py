@@ -30,14 +30,12 @@ from ..fraud import detect, dump_report
 from ..compare import compare
 from ..tasks import submit_fraud_task, cooldown_queue
 from ..logger import loginit, logger, testlogger
-from ..db import db
 from ..const import REDIS_DRAMATIQ_QUEUE
 from ..exceptions import AFNoCompany, AFReportNotReady, AFReportAlreadyExists, AFNoTitle, AFCompanyError
 from ..settings import settings
 from ..statistics import statistics
 from ..aliases import resolve_alias
 # from ..search import search
-from ..companydb import dbsearch
 from ..aliases import aliases
 from ..base import Base
 from ..dbsession import DBSession, ScopedDBSession
@@ -153,13 +151,16 @@ def main():
         compare(c1, c2)
 
     elif args.cmd == "info":
-        try:
-            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession, full=False)
-        except (AFNoCompany, AFNoTitle):
-            print(f"Company {args.company} not found")
-            return
-        print(c.info(dbsession=dbsession))
-        
+
+        with DBSession() as dbsession:
+
+            try:
+                c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession, full=False)
+            except (AFNoCompany, AFNoTitle):
+                print(f"Company {args.company} not found")
+                return
+            print(c.info(dbsession=dbsession))
+            
     elif args.cmd == "search":
         try:
             needle = args.args[0]
@@ -175,20 +176,21 @@ def main():
         
 
     elif args.cmd == "fraud":
-        try:
-            c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
-        except (AFNoCompany, AFNoTitle, AFCompanyError):
-            print("No such company (geo or no 2gis reviews)")
-            return
+        with DBSession() as dbsession:
+            try:
+                c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
+            except (AFNoCompany, AFNoTitle, AFCompanyError):
+                print("No such company (geo or no 2gis reviews)")
+                return
 
-        if args.show:
-            settings.show_hit_th = args.show
+            if args.show:
+                settings.show_hit_th = args.show
 
-        try:
-            detect(c, cl, explain=args.explain, force=args.overwrite, dbsession=dbsession)
-        except AFReportAlreadyExists as e:
-            print(f"Report already exists for {c} and no --overwrite")
-        dump_report(c.object_id)
+            try:
+                detect(c, cl, explain=args.explain, force=args.overwrite, dbsession=dbsession)
+            except AFReportAlreadyExists as e:
+                print(f"Report already exists for {c} and no --overwrite")
+            dump_report(c.object_id)
 
 
     elif args.cmd in ["list", "delreport", "wipe", "submitfraud", "export"]:

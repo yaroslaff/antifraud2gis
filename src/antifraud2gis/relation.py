@@ -1,8 +1,3 @@
-from .models.company import Company
-from .settings import settings
-from .exceptions import AFNoCompany, AFCompanyError
-from .logger import logger
-from .models.review import Review
 import os
 import numpy as np
 from collections import defaultdict
@@ -11,6 +6,14 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 from rich import print as rprint, print_json
+
+
+from .models.company import Company
+from .settings import settings
+from .exceptions import AFNoCompany, AFCompanyError
+from .logger import logger
+from .models.review import Review
+from .dbsession import DBSession
 
 #risk_hit_th = int(os.getenv('RISK_HIT_TH', '10'))
 #risk_median_th = int(os.getenv('RISK_MEDIAN_TH', '15'))
@@ -317,29 +320,31 @@ class RelationDict:
     def export(self):
         rellist = list()
 
-        for rel in sorted(self.relations.values(), key=lambda x: x.count, reverse=True):
-            rel.calc()
-            # hide if not dangerous and low count
-            if rel.count < min(settings.show_hit_th, settings.risk_hit_th):
-                continue
 
-            try:
-                _c = Company.get_or_fetch(rel.b)
-            except (AFNoCompany, AFCompanyError):
-                # print(f"Ignore NO-COMPANY {rel.b} with {rel.count} hits")
-                continue
-            data = dict()
-            # data['tags'] = _c.tags
-            data['title'] = _c.get_title()
-            data['town'] = _c.get_town()
-            # data['alias'] = _c.alias
-            data['oid'] = _c.object_id
-            data['hits'] = rel.count
-            data['median'] = rel.median
-            data['arating'] = rel.avg_arating
-            data['brating'] = rel.avg_brating
-            data['risk'] = rel.is_risk()
-            rellist.append(data)
+        with DBSession() as dbsession:
+            for rel in sorted(self.relations.values(), key=lambda x: x.count, reverse=True):
+                rel.calc()
+                # hide if not dangerous and low count
+                if rel.count < min(settings.show_hit_th, settings.risk_hit_th):
+                    continue
+
+                try:
+                    _c = Company.get_or_fetch(rel.b, dbsession=dbsession, full=False)
+                except (AFNoCompany, AFCompanyError):
+                    # print(f"Ignore NO-COMPANY {rel.b} with {rel.count} hits")
+                    continue
+                data = dict()
+                # data['tags'] = _c.tags
+                data['title'] = _c.get_title()
+                data['town'] = _c.get_town()
+                # data['alias'] = _c.alias
+                data['oid'] = _c.object_id
+                data['hits'] = rel.count
+                data['median'] = rel.median
+                data['arating'] = rel.avg_arating
+                data['brating'] = rel.avg_brating
+                data['risk'] = rel.is_risk()
+                rellist.append(data)
         return rellist
 
 

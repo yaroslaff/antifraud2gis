@@ -17,7 +17,6 @@ import os
 from sqlalchemy import Column, String, Text, ForeignKey, Boolean, DateTime, func, select
 from sqlalchemy.orm import Session, declarative_base, relationship, Mapped, mapped_column, reconstructor
 
-from ..db import db
 from ..const import WSS_THRESHOLD, LOAD_NREVIEWS, SLEEPTIME, LMDB_MAP_SIZE
 from ..settings import settings
 from ..statistics import statistics
@@ -73,9 +72,8 @@ class Author(Base):
         pass
 
     @classmethod
-    def get_or_fetch(cls, public_id: str, dbsession=None) -> "Author":
-        dbsession = dbsession or DBSession()
-
+    def get_or_fetch(cls, public_id: str, dbsession: Session) -> "Author":
+        
         # Try to load from DB
         user = dbsession.get(cls, public_id)
         if user:
@@ -127,6 +125,8 @@ class Author(Base):
             return city.replace(u'\xa0', u' '), address
 
 
+        print("network fetch author", public_id)
+
 
         url = f'https://api.auth.2gis.com/public-profile/1.1/user/{public_id}/content/feed?page_size=20'
 
@@ -166,6 +166,7 @@ class Author(Base):
             data = r.json()
 
             for el in data['content_feed']:
+
                 try:
                     review_data = el['review']
 
@@ -173,19 +174,19 @@ class Author(Base):
                     obj = review_data['object']
                     _company = dbsession.get(Company, obj['id'])
                     if _company is None:
-                        # print(f"Split ({obj['id']}): {obj['address']!r}")
                         city, address = split_addr(obj['address'])
 
-                        if address:
-                            # normal company
+                        if True:
+                            # normal company may have no address, e.g. 70000001083275091
                             _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
                             dbsession.add(_company)
                             dbsession.commit()
                         else:
+                            pass
                             # no address, maybe geo object
-                            _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=None, error='No address (maybe geo object)')
-                            dbsession.add(_company)
-                            dbsession.commit()
+                            # _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=None, error='No address (maybe geo object)')
+                            # dbsession.add(_company)
+                            # dbsession.commit()
                     
 
                     # save review

@@ -34,8 +34,6 @@ from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_L
 from ..logger import logger, loginit
 from ..session import http_session
 from ..utils import random_company
-from ..companydb import update_company, check_by_oid, get_by_oid, dbsearch, dbtruncate, make_connection
-from ..db import db
 from ..dbsession import DBSession
 
 def countdown(n=5):

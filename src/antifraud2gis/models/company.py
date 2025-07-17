@@ -12,8 +12,8 @@ import numpy as np
 # import lmdb
 import redis
 
+from rich.progress import Progress, BarColumn, TextColumn, TimeElapsedColumn, TimeRemainingColumn, SpinnerColumn
 
-from rich.progress import Progress
 from rich import print_json
 from rich.pretty import pretty_repr
 from requests.exceptions import RequestException
@@ -33,14 +33,14 @@ from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError, AFCompanyNotFou
 from ..aliases import resolve_alias
 from ..statistics import statistics
 from ..aliases import aliases, resolve_alias
-from ..db import db
-from ..companydb import dbsearch
 from ..base import Base
 from ..dbsession import scoped_db_session
+from ..utils import caller
 
 # to avoid circular import
 #class RelationDict:
 #    pass
+
 
 
 class Company(Base):
@@ -85,9 +85,10 @@ class Company(Base):
 
 
     @classmethod
-    def get_or_fetch(cls, object_id: str, dbsession=None, full=True) -> "Company":        
-        dbsession = dbsession or scoped_db_session()
+    def get_or_fetch(cls, object_id: str, dbsession, full=True) -> "Company":        
         # Try to load from DB
+
+        assert object_id is not None
 
         company = dbsession.get(cls, object_id)
         if company:
@@ -124,7 +125,7 @@ class Company(Base):
 
         from .review import Review
         dbsession = dbsession or scoped_db_session()
-        print(f"FETCH {object_id} full: {full}")
+        print(f"FETCH {object_id} full: {full} caller: {caller()}")
 
         """ Fetch ALL reviews for company (all users) + update meta """
 
@@ -136,56 +137,72 @@ class Company(Base):
 
         ext_reviews = list()
 
-        while url:
-            if ':8080' in url:
-                logger.debug(f'strip :8080 from {url}')
-                url = url.replace(':8080', '')
-            logger.debug(f".. load company reviews p{page} for {object_id}: {url}")
-            r = None
-            while r is None:
+        progress_total = None
+        current_review_idx = 1
 
-                try:                    
-                    r = http_session.get(url)
-                except RequestException as e:
-                    print("RequestException", e)
-                    time.sleep(1)
-            
+        with Progress(
+            SpinnerColumn(),
+            BarColumn(),
+            "[progress.percentage]{task.percentage:>3.0f}%",
+            TimeElapsedColumn(),
+            TimeRemainingColumn(),
+            TextColumn("[green]{task.description}"),  # перенесли в конец
+        ) as progress:
+            task = progress.add_task("[cyan]Loading users...", total=None)            
 
-            if r.status_code == 400:
-                raise NotImplementedError
+            while url:
+                if ':8080' in url:
+                    logger.debug(f'strip :8080 from {url}')
+                    url = url.replace(':8080', '')
+                logger.debug(f".. load company reviews p{page} for {object_id}: {url}")
+                r = None
+                while r is None:
 
-            r.raise_for_status()
+                    try:                    
+                        r = http_session.get(url)
+                    except RequestException as e:
+                        print("RequestException", e)
+                        time.sleep(1)
+                
 
-            if r.from_cache:
-                logger.debug(f"CACHED {url}")
+                if r.status_code == 400:
+                    raise NotImplementedError
 
-            data = r.json()
+                r.raise_for_status()
 
-            if meta is None:
-                meta = data['meta']
+                data = r.json()
 
-            for r in data['reviews']:
-                public_id = r['user']['public_id']
+                if meta is None:
+                    meta = data['meta']
+                    progress_total = data['meta']['total_count']
+                    progress.update(task, total=progress_total)
 
-                if public_id is not None:
-                    u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
+                for r in data['reviews']:
+                    public_id = r['user']['public_id']
+                    current_review_idx += 1 
+                    progress.update(task, advance=1, description=f"[green]User {r['user']['public_id']}: {r['user']['name']}")
 
-                    if not full:
-                        # maybe we can skip here?
-                        company = dbsession.get(cls, object_id)
-                        if company:
-                            print(f"Short-loaded {object_id}")
-                            return company
-                else:
-                    ext_reviews.append(r)
+                    if public_id is not None:
+                        u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
 
-            # self._reviews.extend(data['reviews'])
-            url = data['meta'].get('next_link')
-            logger.debug(f'next_link: {url}')
-            time.sleep(SLEEPTIME)
+                        if not full:
+                            # maybe we can skip here?
+                            company = dbsession.get(cls, object_id)
+                            if company:
+                                print(f"Short-loaded {object_id}")
+                                return company
+                    else:
+                        ext_reviews.append(r)
 
-            page+=1
+                # self._reviews.extend(data['reviews'])
+                url = data['meta'].get('next_link')
+                logger.debug(f'next_link: {url}')
+                time.sleep(SLEEPTIME)
+
+                page+=1
         
+
+
 
         # loaded all pages
         company = dbsession.get(cls, object_id)
