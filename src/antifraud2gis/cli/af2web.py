@@ -29,7 +29,6 @@ from ..tasks import submit_fraud_task, get_qsize
 from ..settings import settings
 from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_LIST, REDIS_WORKER_STATUS
 # from ..search import search
-from ..companydb import dbsearch
 from ..compare import compare
 from ..logger import loginit, testlogger
 
