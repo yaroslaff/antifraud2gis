@@ -21,10 +21,11 @@ from pathlib import Path
 # import sqlite3
 
 import sqlalchemy
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, select
 from sqlalchemy.orm import Session
+import typer
 
-from ..models.company import Company, CompanyList
+from ..models.company import Company
 from ..models.author import Author
 from ..fraud import detect, dump_report
 from ..compare import compare
@@ -38,7 +39,7 @@ from ..aliases import resolve_alias
 # from ..search import search
 from ..aliases import aliases
 from ..base import Base
-from ..dbsession import DBSession, ScopedDBSession
+from ..db import DBSession, ScopedDBSession, check_or_create_db
 
 
 # CLI
@@ -51,9 +52,17 @@ from .summary import printsummary
 
 last_summary = 0
 
-def get_args():
+
+app = typer.Typer(add_completion=False,     context_settings={"help_option_names": ["-h", "--help"]})
+verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
+
+@app.callback()
+def app_callback(verbose: bool = verbose_option):
+    """ Antifraud for 2GIS (dev tool) """
+    loginit(verbose=verbose)
 
 
+def argalias():
     aa = ArgAlias()
     aa.alias(["list"], "l")
     aa.alias(["info"], "i")
@@ -64,6 +73,10 @@ def get_args():
     
     aa.skip_flags()
     aa.parse()
+
+def get_args():
+
+
 
     parser = argparse.ArgumentParser()
     parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases'])
@@ -93,38 +106,110 @@ def get_args():
 def any_filter(args):
     return args.company or args.name or args.town or args.detection or args.report or args.noreport
 
-def createdb():
-    print("CREATE db", settings.dburl)
 
-    engine = create_engine(settings.dburl)
-    Base.metadata.create_all(engine)
-    print("Database initialized.")
-    return
+@app.command()
+def summary():
+    """ database summary """
+    printsummary()
 
-def check_or_create_db():
+@app.command(name="aliases")
+def cmd_aliases():
+    """ list built-in aliases for companies """
+    for oid, alias_rec in aliases.items():
+        remark = alias_rec.get('remark', '')
+        remark = f'({remark})' if remark else ''
+
+        print(f"{oid} = {alias_rec['alias']} {remark}")
+
+@app.command()
+def info(oid: str):
+    """ info about company """
+    with DBSession() as dbsession:
+        object_id = resolve_alias(oid)
+
+        try:
+            c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
+        except (AFNoCompany, AFNoTitle):
+            print(f"Company {oid} not found")
+            return
+        print(c.info(dbsession=dbsession))
+
+
+@app.command()
+def search(
+    query: str,    
+    brief: bool = typer.Option(False, "--brief", "-b", help="Show only object_id"),
+    summary: bool = typer.Option(False, "--sum", help="Show summary"),
+):
+    """
+    Search companies by title (partial match), optionally filter by city.
+    Excludes companies with an error field set.
+    """
+
+
+    with DBSession() as session:
+        results = Company.search(session, query=query)
+        found = 0
+        for c in results:
+            found +=1
+            # typer.echo(c.object_id if brief else f"- {c.title} ({c.city}) @ {c.address or 'N/A'}")
+            print(c.object_id if brief else c)
+
+        if summary:
+            print(f"# Found {found} companies")
+            raise typer.Exit(1)
+
+
+
+
+
+@app.command()
+def fraud(oid: str,
+        explain: bool = typer.Option(False, "--explain", "-e", help="Show explanation"),
+        force: bool = typer.Option(False, "--force", "-f", help="Force recalculation")):
+    
+    """ fraud detection """
+
+    check_or_create_db()
 
     with DBSession() as dbsession:
+        object_id = resolve_alias(oid)
+
         try:
-            # n_users = dbsession.query(User).count()
-            n_users = Author.nusers(dbsession=dbsession)
-        except sqlalchemy.exc.OperationalError as e:
-            print("No db file? Create it")
-            createdb()
-            n_users = dbsession.query(Author).count()
+            c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession)
+        except (AFNoCompany, AFNoTitle, AFCompanyError):
+            print("No such company (geo or no 2gis reviews)")
+            return
+
+        # if args.show:
+        #    settings.show_hit_th = args.show
+
+        try:
+            detect(c, explain=explain, force=force, dbsession=dbsession)
+        except AFReportAlreadyExists as e:
+            print(f"Report already exists for {c} and no --force")
+        dump_report(str(c.object_id))
+
+
 
 
 def main():
-    args = get_args()
+    # args = get_args()
 
     stopfile = Path('~/.af2gis-stop').expanduser()
     
+    argalias()
+    app()
+    sys.exit(0)
+
+    #
+    # UNUSED code below
+    #
+
+
     dbsession = None
 
     r = redis.Redis(decode_responses=True)
-
-    cl = CompanyList()
-
-    loginit("DEBUG" if args.verbose else "INFO")
 
     check_or_create_db()
 
@@ -175,118 +260,3 @@ def main():
             print("total:", len(res))
         
 
-    elif args.cmd == "fraud":
-        with DBSession() as dbsession:
-            try:
-                c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession)
-            except (AFNoCompany, AFNoTitle, AFCompanyError):
-                print("No such company (geo or no 2gis reviews)")
-                return
-
-            if args.show:
-                settings.show_hit_th = args.show
-
-            try:
-                detect(c, cl, explain=args.explain, force=args.overwrite, dbsession=dbsession)
-            except AFReportAlreadyExists as e:
-                print(f"Report already exists for {c} and no --overwrite")
-            dump_report(c.object_id)
-
-
-    elif args.cmd in ["list", "delreport", "wipe", "submitfraud", "export"]:
-
-        # sanity check
-        if args.cmd in ["submitfraud", "fraud", "delreport", "wipe"] and not any_filter(args):
-            if len(args.args) == 1:
-                args.company = args.args[0]
-            else:
-                print(f"Need company filter for {args.cmd}")
-                sys.exit(1)
-
-        if args.cmd == "wipe" and args.company:
-            # do not iterate over list, do not create Company() object, company may be broken. just wipe and forget.
-            Company.wipe(args.company)
-            return
-
-
-        # if company is given, create it first (if it's missing)
-        if args.company and args.cmd not in ['wipe']:
-            try:
-                c = Company.get_or_fetch(object_id=resolve_alias(args.company))
-            except (AFNoCompany, AFNoTitle, AFCompanyError):
-                print("No such company (geo or no 2gis reviews)")
-                return
-
-        # PRE PROCESSING
-        if args.cmd == "delreport":
-            # force args.report
-            args.report = True
-
-        total_processed = 0
-        effectively_processed = 0
-
-
-        for c in cl.companies(oid=args.company, name=args.name, town=args.town, detection=args.detection, report=args.report, noreport=args.noreport, limit=args.limit):
-
-            total_processed += 1
-
-            if args.cmd == "list":
-                if args.fmt == "brief":
-                    _print(c.object_id)
-                else:
-                    print(c)
-
-            elif args.cmd == "submitfraud":
-                if args.maxq:
-                    cooldown_queue(args.maxq)
-                print("submit fraud request for", c)
-                submit_fraud_task(oid = c.object_id, force=args.overwrite)
-
-
-            elif args.cmd == "delreport":                
-                print(f"Delete report for {c}")
-                c.report_path.unlink(missing_ok=True)
-                c.explain_path.unlink(missing_ok=True)
-                c.trusted = None
-                c.detections = list()
-                c.save_basic()
-
-
-            elif args.cmd == "wipe":
-                if args.really:
-                    print(f"wipe {c}")
-                    c.wipe(c.object_id)
-                else:
-                    print("[NOT REALLY] wipe", c)
-
-            elif args.cmd == "export":
-                _print(json.dumps(c.export()))
-            
-            # Stop if stopfile
-            if stopfile.exists():
-                print("Stopfile found, exit")
-                stopfile.unlink()
-                sys.exit(0)
-        
-            # Stop if processed enough
-            if args.limit:
-                if args.cmd == "fraud":
-                    if effectively_processed >= args.limit:
-                        print(f"Processed {args.limit} companies, exit")
-                        break
-                else:
-                    if total_processed >= args.limit:
-                        print(f"Processed {args.limit} companies, exit")
-                        break
-            
-            if args.sleep:
-                time.sleep(args.sleep)
-
-
-        if args.fmt == 'normal' and args.cmd not in ['export']:
-            # POST PROCESSING
-            if args.cmd == "fraud":
-                print(f'# Fraud reports calculated {effectively_processed}')
-
-            print(f'# Total processed {total_processed} comanies')
-            print(statistics)

@@ -14,10 +14,10 @@ from collections import defaultdict
 from ..logger import logger
 
 from ..const import LMDB_MAP_SIZE
-from ..models.company import Company, CompanyList
+from ..models.company import Company
 from ..fraud import detect
 
-from ..dbsession import DBSession
+from ..db import DBSession
 from ..settings import settings
 from ..models.author import Author
 from ..models.review import Review

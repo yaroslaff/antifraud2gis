@@ -9,7 +9,7 @@ from rich import print_json
 from .author import Author
 from .company import Company
 from ..base import Base
-from ..dbsession import DBSession
+from ..db import DBSession
 
 class Review(Base):
 
@@ -116,7 +116,7 @@ class Review(Base):
     @property
     def name(self) -> str:
         if self._name:
-            return self._name
+            return f'{self.provider}:{self._name}'
         else:
             return self.author.name
 

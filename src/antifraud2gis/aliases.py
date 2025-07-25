@@ -1,3 +1,8 @@
+from .models.company import Company
+from .db import DBSession
+from .settings import settings
+from .exceptions import AFNoCompany
+
 aliases = {
     '70000001094664808': {
         'alias': 'manty',
@@ -130,15 +135,23 @@ aliases = {
         'alias': 'kioskbp',
         'remark': 'no address'
     }
-
-    
-
 }
 
-def resolve_alias(alias: str):
-    # print("Resolve", alias)
+def resolve_alias(alias: str) -> str:    
     for k, v in aliases.items():
         if v.get('alias') == alias:
             return k
+        
+    # not an alias
+    if alias == ":next":
+        with DBSession() as dbsession:
+            nxt = Company.random_next_company(dbsession=dbsession, city=settings.lock_city,)
+            print("Next:", nxt)
+            return str(nxt.object_id)
+
+    else:
+        if len(alias) < 15 or len(alias) > 17:
+            raise AFNoCompany(f"Invalid alias {alias!r}")
+
     return alias
         

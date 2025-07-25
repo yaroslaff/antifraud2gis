@@ -13,7 +13,7 @@ from .settings import settings
 from .exceptions import AFNoCompany, AFCompanyError
 from .logger import logger
 from .models.review import Review
-from .dbsession import DBSession
+from .db import DBSession
 
 #risk_hit_th = int(os.getenv('RISK_HIT_TH', '10'))
 #risk_median_th = int(os.getenv('RISK_MEDIAN_TH', '15'))
@@ -336,7 +336,7 @@ class RelationDict:
                 data = dict()
                 # data['tags'] = _c.tags
                 data['title'] = _c.get_title()
-                data['town'] = _c.get_town()
+                data['town'] = str(_c.city)
                 # data['alias'] = _c.alias
                 data['oid'] = _c.object_id
                 data['hits'] = rel.count

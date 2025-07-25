@@ -82,3 +82,7 @@ class EmptyUserFD(BaseFD):
         print(f"Empty ratings ({len(self.empty_ratings)}): {self.empty_ratings}", file=fh)
         print(f"Not-empty ratings ({len(self.non_empty_ratings)}): {self.non_empty_ratings}", file=fh)
         print("", file=fh)
+
+    def metrics(self):
+        empty_user_rate = round(100 * len(self.empty_ratings) / (len(self.empty_ratings) + len(self.non_empty_ratings)), 1)
+        return dict(empty_user_rate=empty_user_rate)

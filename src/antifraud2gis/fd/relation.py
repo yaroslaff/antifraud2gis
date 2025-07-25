@@ -4,7 +4,7 @@ import numpy as np
 
 from sqlalchemy import inspect
 
-from ..dbsession import DBSession
+from ..db import DBSession
 
 from .fd import BaseFD
 from ..models.author import Author

@@ -1,5 +1,7 @@
 from sqlalchemy import create_engine
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker, Session, scoped_session
+from .base import Base
 
 from .settings import settings
 
@@ -40,5 +42,27 @@ def db_session() -> Session:
 def dbsession_init():
     scoped_db_session()
     db_session()
+
+
+def createdb():
+    print("CREATE db", settings.dburl)
+
+    engine = create_engine(settings.dburl)
+    Base.metadata.create_all(engine)
+    print("Database initialized.")
+    return
+
+def check_or_create_db():
+    from .models.author import Author
+
+    with DBSession() as dbsession:
+        try:
+            # n_users = dbsession.query(User).count()
+            n_users = Author.nusers(dbsession=dbsession)
+        except OperationalError as e:
+            print("No db file? Create it")
+            createdb()
+            n_users = dbsession.query(Author).count()
+
 
 dbsession_init()

@@ -17,9 +17,10 @@ from typing import Optional
 from sqlalchemy import inspect
 from sqlalchemy.orm import Session
 
-from .const import WSCORE_THRESHOLD, WSCORE_HITS_THRESHOLD, MAX_USER_REVIEWS
+from .const import MAX_USER_REVIEWS
 from .logger import logger
-from .models.company import Company, CompanyList
+from .models.company import Company
+from .models.metric import Metric
 
 from .models.author import Author
 from .relation import RelationDict
@@ -27,9 +28,9 @@ from .settings import settings
 from .exceptions import AFReportNotReady, AFNoCompany, AFReportAlreadyExists
 # from .usernotes import Usernotes
 from .fd.master import MasterFD
-from .dbsession import scoped_db_session
+from .db import DBSession
 
-def detect(c: Company, cl: CompanyList, dbsession: Session, explain: bool = False, force=False):
+def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
 
     debug_oids = os.getenv("DEBUG_OIDS", "").split(" ")
     debug_uids = os.getenv("DEBUG_UIDS", "").split(" ")
@@ -108,6 +109,27 @@ def detect(c: Company, cl: CompanyList, dbsession: Session, explain: bool = Fals
     report['score'] = score
     report['relations'] = c.relations.export()
 
+    metrics = master_detector.metrics()
+    print_json(data=metrics, indent=4)
+
+    # Save metrics
+
+    for metric_name, value in metrics.items():
+        print(f"save {metric_name} = {value}")
+
+        metric = dbsession.query(Metric).filter_by(company=c, name=metric_name).first()
+        if metric:
+            print(f"update {metric_name} = {value}")
+            metric.value = value
+        else:
+            print(f"insert {metric_name} = {value}")
+            metric = Metric(company=c, name=metric_name, value=value)
+            dbsession.add(metric)
+
+    c.metrics_calculated = datetime.datetime.now()
+    dbsession.commit()
+
+
     with gzip.open(c.report_path, "wt") as fh:
         json.dump(report, fh)
 
@@ -116,19 +138,12 @@ def detect(c: Company, cl: CompanyList, dbsession: Session, explain: bool = Fals
         with gzip.open(c.explain_path, "wt") as fh:            
             master_detector.explain(fh=fh)
 
-    if False:
-        c.trusted = score['trusted']
-        c.detections = [ dline.split(' ')[0] for dline in score['detections'] ]
-        c.save_basic()
-
-        update_company(c.export())
-
     logger.info(f"DETECTION RESULT {c}")
     return score
 
 
 def dump_report(object_id: str, dbsession: Optional[Session] = None):
-    dbsession = dbsession or scoped_db_session()
+    dbsession = dbsession or DBSession()
 
     c = Company.get_or_fetch(object_id, dbsession=dbsession)
     if c.error:
@@ -178,11 +193,13 @@ def dump_report(object_id: str, dbsession: Optional[Session] = None):
         else:
             rating_cell = Text(f"{rel['arating']:.1f} {rel['brating']:.1f}")
 
-        table.add_row( _c.get_title(), _c.get_town(), Text(_c.object_id, style='grey30'), hits_cell,
+        table.add_row( str(_c.get_title()), str(_c.city), Text(_c.object_id, style='grey30'), hits_cell,
                         # f"{rel.mean:.1f}", 
                         median_cell, rating_cell)
     print()
     console.print(table)
     print_json(data=report['score'])
+
+
 
     # rprint(self)

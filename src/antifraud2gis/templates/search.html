@@ -13,6 +13,7 @@
             <table>
                 <thead>
                     <th>Компания</th>
+                    <th>Город</th>
                     <th>Адрес</th>
                     <th>Рейтинг</th>
                     <th>Отзывы</th>
@@ -21,18 +22,22 @@
                     
                     {% for res in results %}
                         <tr>
-                            <td><a href="/report/{{res.oid}}"><b>{{res.title}}</b></a>
-                            {% if res.trusted is not none %}
-                                {% if res.trusted %}
-                                    <span class="company-tag trusted-tag">Проверено</span>
-                                {% else %}
-                                    <span class="company-tag suspicious-tag">Подозрительная</span>
+                            <td><a href="/report/{{res.object_id}}"><b>{{res.title}}</b></a>
+                            {% if False%}
+                                {% if res.trusted is not none %}
+                                    {% if res.trusted %}
+                                        <span class="company-tag trusted-tag">Проверено</span>                                    
+                                    {% else %}
+                                        <span class="company-tag suspicious-tag">Подозрительная</span>                                    
+                                    {% endif %}
                                 {% endif %}
                             {% endif %}
+
                             </td>
+                            <td>{{res.city}}</td>
                             <td>{{res.address}}</td>
                             <td>{{res.rating_2gis}}</td>
-                            <td>{{res.nreviews}}</td>
+                            <td>{{res.nreviews()}}</td>
                         </tr>
                     {% endfor %}
                 </tbody>

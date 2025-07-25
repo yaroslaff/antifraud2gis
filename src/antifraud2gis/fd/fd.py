@@ -24,3 +24,6 @@ class BaseFD():
 
     def explain(self, fh):
         pass
+
+    def metrics(self):
+        return dict()

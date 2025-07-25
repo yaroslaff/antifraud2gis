@@ -24,8 +24,10 @@ from ..session import http_session
 # from .review import Review
 from ..logger import logger
 from ..base import Base
-from ..dbsession import DBSession, ScopedDBSession
-from ..exceptions import AFUserPrivate
+from ..db import DBSession, ScopedDBSession
+from ..exceptions import AFAuthorPrivate
+from ..net.author_reviews import AuthorReviewsIterator
+
 
 THRESHOLD_NR=3
 THRESHOLD_TS=1.5
@@ -72,8 +74,7 @@ class Author(Base):
         pass
 
     @classmethod
-    def get_or_fetch(cls, public_id: str, dbsession: Session) -> "Author":
-        
+    def get_or_fetch(cls, public_id: str, dbsession: Session) -> "Author":        
         # Try to load from DB
         user = dbsession.get(cls, public_id)
         if user:
@@ -124,9 +125,68 @@ class Author(Base):
             
             return city.replace(u'\xa0', u' '), address
 
+        dbsession = dbsession or DBSession()
 
-        print("network fetch author", public_id)
+        _author = None
 
+        # get base info for user
+        _author = cls.fetch_base(public_id=public_id, dbsession=dbsession)
+
+        if _author.private:
+            # do not fetch reviews if user has private profile
+            return _author
+
+        ar = AuthorReviewsIterator(public_id=public_id)
+
+        for review_data in ar:            
+            # save company (if needed)
+            obj = review_data['object']
+            _company = dbsession.get(Company, obj['id'])
+            if _company is None:
+                city, address = split_addr(obj['address'])
+
+                if True:
+                    # normal company may have no address, e.g. 70000001083275091
+                    _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
+                    _company.update_search_str()
+                    dbsession.add(_company)
+                    dbsession.commit()
+
+            # save review
+            _review = Review(
+                id=review_data['id'],
+                author=_author,
+                _name=None, # name will be takes from _user.name
+                company=_company,
+                provider=review_data['provider'],
+                rating=review_data['rating'],
+                created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
+            )
+            dbsession.add(_review)
+            dbsession.commit()
+           
+        statistics.total_users_loaded_network += 1
+        statistics.total_users_loaded += 1
+        return _author
+
+
+    @classmethod
+    def OLD_fetch(cls, public_id: str, dbsession = None) -> 'Author':
+        from .company import Company
+        from .review import Review
+
+        def split_addr(addr: str): 
+            if ',' in obj['address']:
+                city, address = obj['address'].split(',', 1)
+            else:
+                city = obj['address']
+                address = None
+            
+            city = city.strip()
+            if address:
+                address = address.strip()
+            
+            return city.replace(u'\xa0', u' '), address
 
         url = f'https://api.auth.2gis.com/public-profile/1.1/user/{public_id}/content/feed?page_size=20'
 
@@ -179,6 +239,7 @@ class Author(Base):
                         if True:
                             # normal company may have no address, e.g. 70000001083275091
                             _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
+                            _company.update_search_str()
                             dbsession.add(_company)
                             dbsession.commit()
                         else:
@@ -197,7 +258,7 @@ class Author(Base):
                         company=_company,
                         provider=review_data['provider'],
                         rating=review_data['rating'],
-                        created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00"))
+                        created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
                     )
                     dbsession.add(_review)
                     dbsession.commit()
@@ -226,6 +287,7 @@ class Author(Base):
         statistics.total_users_loaded_network += 1
         statistics.total_users_loaded += 1
         return _author
+
 
     def nreviews(self):
         from .review import Review

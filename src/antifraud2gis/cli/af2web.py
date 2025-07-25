@@ -23,7 +23,7 @@ from dramatiq import get_broker
 
 from rich import print_json
 
-from ..models.company import Company, CompanyList
+from ..models.company import Company
 from ..exceptions import AFReportNotReady, AFNoCompany, AFNoTitle, AFCompanyError
 from ..tasks import submit_fraud_task, get_qsize
 from ..settings import settings
@@ -31,6 +31,7 @@ from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_L
 # from ..search import search
 from ..compare import compare
 from ..logger import loginit, testlogger
+from ..db import DBSession
 
 from .api import router as api_router
 
@@ -125,50 +126,52 @@ async def route_compare(request: Request, oida: str, oidb: str):
 
 @app.get("/report/{oid}", name="report", response_class=HTMLResponse)
 async def report(request: Request, oid: str):
-    try:
-        c = Company(oid)
-    except (AFNoCompany, AFNoTitle, AFCompanyError) :
-        return RedirectResponse(app.url_path_for("miss", oid=oid))
-        # raise HTTPException(status_code=404, detail="Company not found")
+    
+    with DBSession() as dbsession:
+        try:
+            c = Company.get_or_fetch(oid, dbsession=dbsession, full=False)
+        except (AFNoCompany, AFNoTitle, AFCompanyError) :
+            return RedirectResponse(app.url_path_for("miss", oid=oid))
+            # raise HTTPException(status_code=404, detail="Company not found")
 
-    try:
-        with gzip.open(c.report_path, "rt") as fh:
-            report = json.load(fh)
-            # print_json(data=report)
-            # print(report['relations'][0])
-
-
-            report_reliable = c.report_reliable(report=report)
-
-            for rel in report['relations']:
-                rep_path = settings.company_storage / (rel['oid'] + '-report.json.gz')
-                if rep_path.exists():
-                    with gzip.open(rep_path, "rt") as fh:
-                        rel_report = json.load(fh)
-                        rel['trusted'] = rel_report['score']['trusted']
-                else:
-                    rel['trusted'] = None
-
-            last_trusted = [json.loads(item) for item in r.lrange(REDIS_TRUSTED_LIST, 0, -1)]
-            last_untrusted = [json.loads(item) for item in r.lrange(REDIS_UNTRUSTED_LIST, 0, -1)]
+        try:
+            with gzip.open(c.report_path, "rt") as fh:
+                report = json.load(fh)
+                # print_json(data=report)
+                # print(report['relations'][0])
 
 
-            return render(
-                request,
-                "report.html", {
-                    "c": c,
-                    "oid": c.object_id,
-                    "title": c.title,
-                    "score": report['score'],
-                    "relations": report['relations'],
-                    "report_reliable": report_reliable
-                    }
-            )
+                report_reliable = c.report_reliable(report=report)
 
-    except FileNotFoundError:
-        # return 
-        return RedirectResponse(app.url_path_for("miss", oid=oid))
-        # raise HTTPException(status_code=404, detail="Report not found")
+                for rel in report['relations']:
+                    rep_path = settings.company_storage / (rel['oid'] + '-report.json.gz')
+                    if rep_path.exists():
+                        with gzip.open(rep_path, "rt") as fh:
+                            rel_report = json.load(fh)
+                            rel['trusted'] = rel_report['score']['trusted']
+                    else:
+                        rel['trusted'] = None
+
+                last_trusted = [json.loads(item) for item in r.lrange(REDIS_TRUSTED_LIST, 0, -1)]
+                last_untrusted = [json.loads(item) for item in r.lrange(REDIS_UNTRUSTED_LIST, 0, -1)]
+
+
+                return render(
+                    request,
+                    "report.html", {
+                        "c": c,
+                        "oid": c.object_id,
+                        "title": c.title,
+                        "score": report['score'],
+                        "relations": report['relations'],
+                        "report_reliable": report_reliable
+                        }
+                )
+
+        except FileNotFoundError:
+            # return 
+            return RedirectResponse(app.url_path_for("miss", oid=oid))
+            # raise HTTPException(status_code=404, detail="Report not found")
 
     return "OK"
 
@@ -178,84 +181,79 @@ async def miss(request: Request, oid: str):
     last_trusted = [json.loads(item) for item in r.lrange(REDIS_TRUSTED_LIST, 0, -1)]
     last_untrusted = [json.loads(item) for item in r.lrange(REDIS_UNTRUSTED_LIST, 0, -1)]
 
-    try:
-        c = Company(oid)
-        assert c.title is not None
 
-    except (AFNoCompany, AFNoTitle, AFCompanyError, AssertionError) as e:
+    with DBSession() as dbsession:
+        try:
+            c = Company.get_or_fetch(oid, full=False, dbsession=dbsession)
+            assert c.title is not None
+
+        except (AFNoCompany, AFNoTitle, AFCompanyError, AssertionError) as e:
+            return render(
+                request,
+                "nocompany.html", {
+                    "request": request, "oid": oid,
+                    "trusted": last_trusted,
+                    "untrusted": last_untrusted
+                }
+            )
+            
         return render(
             request,
-            "nocompany.html", {
-                "request": request, "oid": oid,
+            "miss.html", {
+                "request": request, "title": c.title, "oid": c.object_id,   
+                "settings": settings,
                 "trusted": last_trusted,
                 "untrusted": last_untrusted
             }
         )
-        
-
-
-
-    return render(
-        request,
-        "miss.html", {
-            "request": request, "title": c.title, "oid": c.object_id,   
-            "settings": settings,
-            "trusted": last_trusted,
-            "untrusted": last_untrusted
-        }
-    )
 
 
 @app.post("/submit", response_class=HTMLResponse)
 async def submit(request: Request, oid: str = Form(...), force: bool = Form(False), 
                  cf_token: Optional[str] = Form(default=None, alias="cf-turnstile-response"),):
 
-    try:
-        c = Company(oid)
-    except (AFNoCompany) as e:
-        return render(request,
-            "nocompany.html", {
-                "request": request, "oid": oid,
-            }
-        )
-    
-    if settings.turnstile_sitekey:
-        # captcha must be sovled!
-
-        if not cf_token:
-            print("no captcha response")
-            return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
-
-        verification_response = requests.post(
-            'https://challenges.cloudflare.com/turnstile/v0/siteverify',
-            data={
-                'secret': settings.turnstile_secret,
-                'response': cf_token
-            }
-        )
-            
-        verification_result = verification_response.json()
-        if not verification_result.get('success'):
-            # CAPTCHA verification failed
-            print(f"CAPTCHA verification failed")
-            return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
-
-
-    if c.branch_rating_2gis is None:
-        print("re-create company")        
-        Company.wipe(oid)
-        # c = Company(oid)
-
-    if c.report_path.exists():
-        if force:
-            # pass
-            c.report_path.unlink(missing_ok=True)
-            c.explain_path.unlink(missing_ok=True)
-        else:
-            print("already exists", c)
-            return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
+    with DBSession() as dbsession:
+        try:
+            c = Company.get_or_fetch(oid, full=False, dbsession=dbsession)
+        except (AFNoCompany) as e:
+            return render(request,
+                "nocompany.html", {
+                    "request": request, "oid": oid,
+                }
+            )
         
-    submit_fraud_task(oid, force=force)
+        if settings.turnstile_sitekey:
+            # captcha must be sovled!
+
+            if not cf_token:
+                print("no captcha response")
+                return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
+
+            verification_response = requests.post(
+                'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+                data={
+                    'secret': settings.turnstile_secret,
+                    'response': cf_token
+                }
+            )
+                
+            verification_result = verification_response.json()
+            if not verification_result.get('success'):
+                # CAPTCHA verification failed
+                print(f"CAPTCHA verification failed")
+                return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
+
+
+        if c.report_path.exists():
+            if force:
+                # pass
+                c.report_path.unlink(missing_ok=True)
+                c.explain_path.unlink(missing_ok=True)
+            else:
+                print("already exists", c)
+                return RedirectResponse(app.url_path_for("report", oid=oid), status_code=303)
+            
+        submit_fraud_task(oid, force=force)
     # r.rpush('af2gis:queue', oid)
 
     """
@@ -276,52 +274,52 @@ async def search_view(request: Request, query: str, detections: str):
 
     limit = 50
     
-    if detections in ["trusted", "untrusted"]:
-        detections_arg = detections
-    else:
-        detections_arg = None
-
     if query.isdigit() and len(query) >= 12:
         return RedirectResponse(app.url_path_for("report", oid=query), status_code=303)
     else:
         # results = search(query, limit=25)
 
-        results = dbsearch(query, detection=detections_arg, limit=50)
 
-        last_trusted = [json.loads(item) for item in r.lrange(REDIS_TRUSTED_LIST, 0, -1)]
-        last_untrusted = [json.loads(item) for item in r.lrange(REDIS_UNTRUSTED_LIST, 0, -1)]
+        with DBSession() as dbsession:
+            results = Company.search(
+                dbsession=dbsession,
+                query=query, 
+                limit=100)
 
-        return render(
-            request,
-            "search.html", {
-                "request": request,
-                "query": query,
-                "detections": detections,
-                "title": f"Поиск: {query}",
-                "results": results,
-                "trusted": last_trusted,
-                "untrusted": last_untrusted,
-                "limit": limit
-                }
-        )
+            last_trusted = [json.loads(item) for item in r.lrange(REDIS_TRUSTED_LIST, 0, -1)]
+            last_untrusted = [json.loads(item) for item in r.lrange(REDIS_UNTRUSTED_LIST, 0, -1)]
+
+            return render(
+                request,
+                "search.html", {
+                    "request": request,
+                    "query": query,
+                    "title": f"Поиск: {query}",
+                    "results": results,
+                    "trusted": last_trusted,
+                    "untrusted": last_untrusted,
+                    "limit": limit
+                    }
+            )
 
 
 
 @app.get("/progress/{oid}", response_class=HTMLResponse)
 async def progress(request: Request, oid: str):
-    try:
-        c = Company(oid)
-        print("miss for", c)
-    except (AFNoCompany, AssertionError):
-        return render(
-            request,
-            "nocompany.html", {
-                "request": request, "oid": oid,
-            }
-        )
+    with DBSession() as dbsession:
+        try:
+            c = Company.get_or_fetch(oid, full=False, dbsession=dbsession)
+            print("miss for", c)
+        except (AFNoCompany, AssertionError):
+            return render(
+                request,
+                "nocompany.html", {
+                    "request": request, "oid": oid,
+                }
+            )
 
-    if c.report_path.exists():
-        return RedirectResponse(app.url_path_for("report", oid=oid))
+        if c.report_path.exists():
+            return RedirectResponse(app.url_path_for("report", oid=oid))
 
     wstatus = r.get(REDIS_WORKER_STATUS)
     tasks = r.lrange(REDIS_TASK_QUEUE_NAME, 0, -1)  # возвращает list of bytes    

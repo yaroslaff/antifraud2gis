@@ -31,6 +31,9 @@ class Settings():
         self.min_reviews = int(os.getenv('MIN_REVIEWS', '20'))
 
 
+        # location-specific
+        self.lock_city = os.getenv("LOCK_CITY")
+
         # Relations-specific
         self.risk_hit_th = int(os.getenv('RISK_HIT', '10'))
         self.sametitle_rel = int(os.getenv('SAMETITLE_REL', '3'))

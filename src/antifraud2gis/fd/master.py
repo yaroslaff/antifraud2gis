@@ -6,6 +6,7 @@ import sys
 import json
 import gzip
 import datetime
+from loguru import logger
 
 from sqlalchemy import inspect
 
@@ -56,8 +57,10 @@ class MasterFD(BaseFD):
 
         empty = False
 
+
         if cr.age > settings.max_review_age:
             self.score['expired'] += 1
+            logger.debug(f'Master: expired {cr.created} {cr.name} {cr.rating}')
             return
 
         self.providers[cr.provider] += 1
@@ -67,9 +70,11 @@ class MasterFD(BaseFD):
                 # print(f"User {cr.user.public_id} {cr.created} {cr.provider} already processed DUPLICATE !!!")
                 pass
             self.score['empty_reviews'] += 1
+            logger.debug(f'Master: empty {cr.created} {cr.name} {cr.rating}')
             empty = True
         else:
             self.score['processed_reviews'] += 1
+            logger.debug(f'Master: processed {cr.created} {cr.name} {cr.rating}')
 
 
         for d in self._detectors.values():
@@ -107,4 +112,11 @@ class MasterFD(BaseFD):
         self.score['date'] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
         return self.score
+
+    def metrics(self):
+        m = dict()
+        for d in self._detectors.values():
+            m.update(d.metrics())
+        return m
+    
 

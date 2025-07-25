@@ -5,8 +5,9 @@ import json
 
 from rich import print_json
 
-from ...models.company import Company, CompanyList
+from ...models.company import Company
 from ...exceptions import AFReportNotReady, AFNoCompany, AFNoTitle, AFCompanyError
+from ...db import DBSession
 
 router = APIRouter(prefix="/api/0.1")
 
@@ -21,8 +22,11 @@ async def report(request: Request, oid: str):
     r['trusted'] = None
     r['url'] = None
 
+
+
     try:
-        c = Company(oid)
+        with DBSession() as dbsession:
+            c = Company.get_or_fetch(oid, dbsession=dbsession, full=False)        
     except (AFNoCompany, AFNoTitle, AFCompanyError) as e:
         r['status'] = 'NO'
         return r
