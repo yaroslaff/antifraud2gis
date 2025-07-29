@@ -25,6 +25,7 @@ class MedianAgeFD(BaseFD):
         self.low_rating = 0
         self.agerate = np.empty((0, 2), dtype=int)
         self.processed = 0
+        self.median_age = None
 
     def feed(self, cr: Review, empty: bool = False):
 
@@ -99,4 +100,7 @@ class MedianAgeFD(BaseFD):
         print("", file=fh)
 
     def metrics(self):
+        if self.median_age is None:
+            return None
+
         return dict(median_age=self.median_age)

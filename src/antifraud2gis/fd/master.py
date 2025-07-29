@@ -116,7 +116,9 @@ class MasterFD(BaseFD):
     def metrics(self):
         m = dict()
         for d in self._detectors.values():
-            m.update(d.metrics())
+            dm = d.metrics()
+            if dm is not None:                
+                m.update(dm)
         return m
     
 
