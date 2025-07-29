@@ -142,7 +142,7 @@ class Company(Base):
         cnt_stmt = base_query.with_only_columns(func.count()).order_by(None)
         cnt = dbsession.scalar(cnt_stmt)        
 
-        offset = randint(0, min(cnt, 100))
+        offset = randint(0, min(cnt, 10000))
         stmt = base_query.order_by(cls.object_id).offset(offset).limit(1)
         result = dbsession.scalar(stmt)
         return result
