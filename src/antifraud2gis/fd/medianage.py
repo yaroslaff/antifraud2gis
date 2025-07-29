@@ -97,3 +97,6 @@ class MedianAgeFD(BaseFD):
         print(f"ages ({len(self.user_ages)}): {sorted(self.user_ages)}", file=fh)
         print(f"median age: {self.score['median_user_age']}", file=fh)
         print("", file=fh)
+
+    def metrics(self):
+        return dict(median_age=self.median_age)

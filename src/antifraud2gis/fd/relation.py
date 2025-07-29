@@ -158,3 +158,9 @@ class RelationFD(BaseFD):
         for line in self.records:
             print(line, file=fh)
             print("", file=fh)
+
+    def metrics(self):
+        return dict(
+            risk_users=self.score['risk_users'],
+            sametitle_rel=self.score['sametitle_rel'])
+    

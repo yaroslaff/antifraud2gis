@@ -40,6 +40,11 @@ def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
 
     logger.debug("Run fraud detection for", c)
 
+
+    # check metrics
+    for m in c.metrics:
+        print("METRIC:", m)
+
     if c.report_path.exists() and not force and not explain:
         logger.debug(f"Report {c.report_path} exists")
         raise AFReportAlreadyExists(f"Report already exists: {c.report_path}")
@@ -115,18 +120,17 @@ def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
     # Save metrics
 
     for metric_name, value in metrics.items():
-        print(f"save {metric_name} = {value}")
 
         metric = dbsession.query(Metric).filter_by(company=c, name=metric_name).first()
         if metric:
-            print(f"update {metric_name} = {value}")
             metric.value = value
         else:
-            print(f"insert {metric_name} = {value}")
             metric = Metric(company=c, name=metric_name, value=value)
             dbsession.add(metric)
 
     c.metrics_calculated = datetime.datetime.now()
+    c.metrics_signature = settings.param_fp()
+    dbsession.add(c)
     dbsession.commit()
 
 

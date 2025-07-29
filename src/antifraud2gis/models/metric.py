@@ -18,3 +18,4 @@ class Metric(Base):
 
     def __repr__(self):
         return f'{self.company_id} {self.name} = {self.value}'
+    

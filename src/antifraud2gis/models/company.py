@@ -52,12 +52,12 @@ class Company(Base):
 
     # relations: 'RelationDict'
 
-    object_id = Column(String, primary_key=True)
-    title = Column(String, nullable=False)
-    city = Column(String, nullable=False)
-    address = Column(String, nullable=True) # Null only for error companies, e.g. geo
-    error = Column(String, nullable=True)
-    search_str = Column(String, nullable=False)
+    object_id: Mapped[str] = mapped_column(String, primary_key=True)
+    title: Mapped[str] = mapped_column(String, nullable=False)
+    city: Mapped[str] = mapped_column(String, nullable=False)
+    address: Mapped[str | None] = mapped_column(String, nullable=True)  # Null only for error companies, e.g. geo
+    error: Mapped[str | None] = mapped_column(String, nullable=True)
+    search_str: Mapped[str] = mapped_column(String, nullable=False)
 
     # datetime of full load (or last update)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
@@ -70,6 +70,9 @@ class Company(Base):
 
     reviews: Mapped[list["Review"]] = relationship(back_populates="company")
     metrics: Mapped[list["Metric"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+
+    metrics_calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
+    metrics_signature: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
     @reconstructor

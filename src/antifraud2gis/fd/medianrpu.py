@@ -77,3 +77,6 @@ class MedianRPUFD(BaseFD):
         print(f"result: {self.score['median_rpu']}", file=fh)
         print(f"rdiff: {self.low_rpu_rating} - {self.high_rpu_rating} = {self.rating_diff} > {settings.rating_diff}", file=fh)
         print("", file=fh)
+
+    def metrics(self):
+        return dict(median_rpu=self.median_rpu)

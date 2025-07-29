@@ -26,6 +26,7 @@ import dateutil
 from ..models.company import Company
 from ..models.author import Author
 from ..models.metric import Metric
+from ..models.metricperc import MetricPerc
 # , reset_user_pool
 from ..models.review import Review
 from ..settings import settings
@@ -77,6 +78,9 @@ def arg_aliases():
     aa.skip_flags()
     aa.parse()
 
+
+def byid(object_id: str):
+    url = f'https://catalog.api.2gis.ru/3.0/items/byid?id={object_id}&key=c7f1a769-c8a5-4636-b14d-d8c987808a12&locale=ru_RU&fields=items.locale,items.flags,items.search_attributes.detection_type,search_attributes,items.adm_div,items.city_alias,items.region_id,items.segment_id,items.reviews,items.point,request_type,context_rubrics,query_context,items.links,items.name_ex,items.name_back,items.org,items.group,items.dates,items.external_content,items.contact_groups,items.comment,items.ads.options,items.email_for_sending.allowed,items.stat,items.stop_factors,items.description,items.geometry.centroid,items.geometry.selection,items.geometry.style,items.timezone_offset,items.context,items.level_count,items.address,items.is_paid,items.access,items.access_comment,items.for_trucks,items.is_incentive,items.paving_type,items.capacity,items.schedule,items.schedule_special,items.floors,items.floor_id,items.floor_plans,ad,items.rubrics,items.routes,items.platforms,items.directions,items.barrier,items.reply_rate,items.purpose,items.purpose_code,items.attribute_groups,items.route_logo,items.has_goods,items.has_apartments_info,items.has_pinned_goods,items.has_realty,items.has_otello_stories,items.has_exchange,items.has_payments,items.has_dynamic_congestion,items.is_promoted,items.congestion,items.delivery,items.order_with_cart,search_type,items.has_discount,items.metarubrics,items.detailed_subtype,items.temporary_unavailable_atm_services,items.poi_category,items.has_ads_model,items.vacancies,items.structure_info.material,items.structure_info.floor_type,items.structure_info.gas_type,items.structure_info.year_of_construction,items.structure_info.elevators_count,items.structure_info.is_in_emergency_state,items.structure_info.project_type&viewpoint1=82.883354,54.994857&viewpoint2=82.935058,54.976885&stat[sid]=cb3394ef-f643-4c01-9418-53c364bf6999&stat[user]=d3cc083e-94f0-43eb-8dff-92568e2b53f7&shv=2025-07-22-13&r=390184698'
 
 
 app = typer.Typer(add_completion=False,     context_settings={"help_option_names": ["-h", "--help"]})
@@ -165,6 +169,10 @@ def dump():
             print(idx, metric)
         print()
 
+        print(f"MetricsPerc (up to {limit}/{dbsession.query(Metric).count()}):")
+        for idx, metricperc in enumerate(dbsession.query(MetricPerc).limit(limit).all()):
+            print(idx, metricperc)
+        print()
 
 
 @app.command()
@@ -262,7 +270,7 @@ def сompany_reviews_net(
         help="Optional date (YYYY-MM-DD). Defaults to None.")
     ):
 
-    """ get reviews from network and dump it """
+    """ get reviews from network and dump it (crn) """
 
     object_id = resolve_alias(oid)
     cr = CompanyReviewsIterator(object_id=object_id)
