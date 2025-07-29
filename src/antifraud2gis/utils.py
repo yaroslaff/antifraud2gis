@@ -18,9 +18,6 @@ def random_file(path: Path) -> Optional[Path]:
                     chosen = Path(entry.path)
     return chosen
 
-def random_company() -> str:
-    return random_file(settings.company_storage).name.split('-')[0]
-
 def caller(depth=3):
     PROJECT_ROOT = os.path.dirname(__file__)
     stack = inspect.stack()[1:1+depth]

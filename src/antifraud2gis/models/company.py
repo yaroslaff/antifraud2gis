@@ -121,6 +121,16 @@ class Company(Base):
 
 
     @classmethod
+    def random_company(cls, dbsession: Session) -> str | None:
+        count = dbsession.scalar(select(func.count()).select_from(cls))
+        if not count:
+            return None
+        offset = randint(0, count - 1)
+        stmt = select(cls.object_id).offset(offset).limit(1)
+        return dbsession.scalar(stmt)
+
+
+    @classmethod
     def random_next_company(cls, dbsession: Session, city = None):
         base_query = select(cls).where(
             cls.updated_at.is_(None),
