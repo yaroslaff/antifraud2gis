@@ -9,7 +9,6 @@ from ..base import Base
 
 class MetricPerc(Base):
     __tablename__ = "metricperc"
-    __table_args__ = (UniqueConstraint("company_id", "name", name="uq_company_metric_name"),)
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     city: Mapped[str] = mapped_column(String, nullable=False)

@@ -112,10 +112,8 @@ def cmd_sys():
     r = http_session.get("https://ipinfo.io/ip")
     print(f"Session IP: {r.text}")
 
-    if args.args:
-        oid = args.args[0]
-    else:
-        oid = random_company() or '4504127908538375'
+    oid = random_company() or '4504127908538375'
+
     print("Random test OID:", oid)
     testurl = f'https://public-api.reviews.2gis.com/2.0/branches/{oid}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
 
