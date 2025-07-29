@@ -24,6 +24,7 @@ class MedianRPUFD(BaseFD):
         self.lrpu_ratings = list()
         self.hrpu_ratings = list()
         self.processed = 0
+        self.median_rpu = None
 
 
     def feed(self, cr: Review, empty: bool = False):
@@ -79,4 +80,6 @@ class MedianRPUFD(BaseFD):
         print("", file=fh)
 
     def metrics(self):
+        if self.median_rpu is None:
+            return None
         return dict(median_rpu=self.median_rpu)
