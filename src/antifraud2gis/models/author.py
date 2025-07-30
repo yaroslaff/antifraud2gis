@@ -141,6 +141,12 @@ class Author(Base):
         for review_data in ar:            
             # save company (if needed)
             obj = review_data['object']
+            
+            if obj['type'] != 'branch':
+                # we process only companies type=branch
+                # skip types: attraction adm_div
+                continue
+
             _company = dbsession.get(Company, obj['id'])
             if _company is None:
                 city, address = split_addr(obj['address'])

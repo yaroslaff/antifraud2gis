@@ -64,12 +64,12 @@ def app_callback(verbose: bool = verbose_option):
 
 def argalias():
     aa = ArgAlias()
-    aa.alias(["list"], "l")
-    aa.alias(["info"], "i")
-    aa.alias(["fraud"], "f", "fr")
-    aa.alias(["submitfraud"], "sf", "sfr")
-    aa.alias(["compare"], "cmp")
-    aa.alias(["summary"], "sum", "s")
+    aa.alias("l", "list")
+    aa.alias("i", "info")
+    aa.alias(["f", "fr"], "fraud")
+    aa.alias(["sf","sfr"], "submitfraud")
+    aa.alias("cmp", "compare")
+    aa.alias(["s", "sum"], "summary")
     
     aa.skip_flags()
     aa.parse()
