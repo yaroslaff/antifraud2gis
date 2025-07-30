@@ -283,8 +283,7 @@ def сompany_reviews_net(
 
     """ get reviews from network and dump it (crn) """
 
-    object_id = resolve_alias(oid)
-    print(f"translated {oid} to {object_id}")
+    object_id = resolve_alias(oid)    
     cr = CompanyReviewsIterator(object_id=object_id)
     needle_date = None
 

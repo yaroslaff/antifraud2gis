@@ -176,4 +176,4 @@ class Review(Base):
         # print_json(data=self._data)
         from .author import Author
 
-        return f'Review({self.created.date()} {self.provider} {self.author} {self.rating} > {self.company})'
+        return f'Review({self.id} {self.created.date()} {self.provider} {self.author} {self.rating} > {self.company})'
