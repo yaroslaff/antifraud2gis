@@ -44,6 +44,8 @@ from ..db import DBSession, check_or_create_db
 from ..net.company_reviews import CompanyReviewsIterator
 from ..net.author_reviews import AuthorReviewsIterator
 
+from .metrics import metrics_app
+
 def countdown(n=5):
     for i in range(n, 0, -1):
         print(f'\rCountdown: {i}', end=" ", flush=True)
@@ -64,16 +66,19 @@ def handle_dev(args: argparse.Namespace):
 
 def arg_aliases():
     aa = ArgAlias()
-    aa.alias(["queue"], "q")
-    aa.alias(["company-authors"], "ca")
-    aa.alias(["company-reviews"], "cr")
-    aa.alias(["company-reviews-net"], "crn")
-    aa.alias(["company-fetch"], "cf")
+    aa.alias("q" , "queue")
+    aa.alias("ca", "company-authors")
+    aa.alias("cr", "company-reviews")
+    aa.alias("crn", "company-reviews-net")
+    aa.alias("cf", "company-fetch")
 
-    aa.alias(["author-reviews"], "ar")
-    aa.alias(["author-reviews-net"], "arn")
-    aa.alias(["author-fetch"], "af")
-    
+    aa.alias("ar", "author-reviews")
+    aa.alias("arn", "author-reviews-net")
+    aa.alias("af", "author-fetch")
+
+    aa.alias("mls", ["metrics", "list"])
+
+
     aa.skip_flags()
     aa.parse()
 
@@ -84,6 +89,9 @@ def byid(object_id: str):
 
 app = typer.Typer(add_completion=False,     context_settings={"help_option_names": ["-h", "--help"]})
 verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
+
+app.add_typer(metrics_app, name="metrics")
+
 
 @app.callback()
 def app_callback(verbose: bool = verbose_option):
@@ -251,12 +259,16 @@ def queue(action: str = typer.Argument("show", help="Action: show (default) or r
 
 
 @app.command(name="company-reviews")
-def сompany_reviews(oid: str):
+def сompany_reviews(oid: str,
+        id_only: bool = typer.Option(False, "--id", "-i", help="Only ID of review")):
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
         c = Company.get(object_id=object_id, dbsession=dbsession)
         for r in c.reviews:
-            print(r)
+            if id_only:
+                print(r.id)
+            else:
+                print(r)
 
 @app.command(name="company-reviews-net")
 def сompany_reviews_net(
@@ -272,6 +284,7 @@ def сompany_reviews_net(
     """ get reviews from network and dump it (crn) """
 
     object_id = resolve_alias(oid)
+    print(f"translated {oid} to {object_id}")
     cr = CompanyReviewsIterator(object_id=object_id)
     needle_date = None
 
