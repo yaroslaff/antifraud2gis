@@ -71,7 +71,7 @@ class Company(Base):
     reviews: Mapped[list["Review"]] = relationship(back_populates="company")
     metrics: Mapped[list["Metric"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
-    metrics_calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
+    metrics_calculated: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
     metrics_signature: Mapped[str | None] = mapped_column(String, nullable=True)
 
 
@@ -477,6 +477,15 @@ class Company(Base):
                 return dbsession.query(func.count(Review.id))\
                             .filter(Review.object_id == self.object_id)\
                             .scalar() or 0
+
+
+    def wipe_metrics(self, dbsession: Session):
+        for m in self.metrics:
+            print("delete metric:", m)
+            dbsession.delete(m)
+        self.metrics_signature = None
+        self.metrics_calculated = None
+
 
     def culture(self):
 

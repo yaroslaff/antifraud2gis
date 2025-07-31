@@ -76,7 +76,8 @@ def arg_aliases():
     aa.alias("arn", "author-reviews-net")
     aa.alias("af", "author-fetch")
 
-    aa.alias("mls", ["metrics", "list"])
+    aa.alias(["ml", "mls"], ["metrics", "list"])
+    aa.alias("mw", ["metrics", "wipe"])
 
 
     aa.skip_flags()

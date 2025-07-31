@@ -86,11 +86,15 @@ class RelationFD(BaseFD):
         for rel in self._c.relations.relations.values():
             if rel.check_high_hits():
                 self.hirel += 1
+
+                if rel.get_btitle() in self.titles:
+                    print(f"hit {rel.get_btitle()} {rel.b} c:{rel.count} nu:{rel.nusers}")
+                self.titles.add(rel.get_btitle())
+
                 if rel.check_high_ratings():
                     self.happy_hirel += 1
                     self.happy_hirel_companies.append(rel.b)
                     self.towns.add(rel.get_btown())                    
-                    self.titles.add(rel.get_btitle())
 
                     for u in rel.users():
                         if u.public_id not in self.risk_users:
@@ -100,7 +104,10 @@ class RelationFD(BaseFD):
         self.score['happy_ratio'] = int(100*self.happy_hirel/self.hirel) if self.hirel > 0 else 0
         self.score['happy_long_rel'] = int((100*long_rels)/self.happy_hirel) if self.happy_hirel > 0 else 0
 
-        self.score['sametitle_rel'] = int(100*len(self.titles)/self.happy_hirel) if self.happy_hirel > 0 else 0
+        # OLD: self.score['sametitle_rel'] = int(100*len(self.titles)/self.happy_hirel) if self.happy_hirel > 0 else 0
+        self.score['difftitle'] = 100 - int(100*len(self.titles)/self.hirel) if self.hirel > 0 else 0
+
+
         self.score['risk_users'] = int(100*len(self.risk_users) / self.processed_users)
 
         if len(self.towns) >= settings.happy_long_rel_min_towns \
@@ -108,11 +115,11 @@ class RelationFD(BaseFD):
                 and self.score['happy_long_rel'] >= settings.happy_long_rel:
             self.score['detections'].append(f"happy_long_rel {self.score['happy_long_rel']}% ({long_rels} / {self.happy_hirel})")
 
-        if self.happy_hirel >= settings.sametitle_rel and self.score['sametitle_rel'] <= settings.sametitle_ratio:
-            self.score['detections'].append(f"sametitle_rel {self.score['sametitle_rel']}% ({self.happy_hirel} of {len(self.titles)})")
-
-        elif self.score['risk_users'] > settings.risk_user_ratio:
-            self.score['detections'].append(f"risk_users {self.score['risk_users']}% ({len(self.risk_users)} / {self.processed_users})")
+        #if self.happy_hirel >= settings.sametitle_rel and self.score['difftitle'] <= settings.sametitle_ratio:
+        #    self.score['detections'].append(f"sametitle_rel {self.score['sametitle_rel']}% ({self.happy_hirel} of {len(self.titles)})")
+        #
+        #elif self.score['risk_users'] > settings.risk_user_ratio:
+        #    self.score['detections'].append(f"risk_users {self.score['risk_users']}% ({len(self.risk_users)} / {self.processed_users})")
 
         return self.score
     
@@ -162,5 +169,5 @@ class RelationFD(BaseFD):
     def metrics(self):
         return dict(
             risk_users=self.score['risk_users'],
-            sametitle_rel=self.score['sametitle_rel'])
+            difftitle=self.score['difftitle'])
     

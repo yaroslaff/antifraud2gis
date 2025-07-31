@@ -134,6 +134,10 @@ aliases = {
     '70000001083275091': {
         'alias': 'kioskbp',
         'remark': 'no address'
+    },
+    '70000001057669889': {
+        'alias': 'sp',
+        'remark': 'sametitle?'
     }
 }
 

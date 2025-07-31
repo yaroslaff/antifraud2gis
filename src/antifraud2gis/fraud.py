@@ -41,18 +41,17 @@ def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
     logger.debug("Run fraud detection for", c)
 
 
+
     # check metrics
     for m in c.metrics:
         print("METRIC:", m)
 
-    if c.report_path.exists() and not force and not explain:
-        logger.debug(f"Report {c.report_path} exists")
-        raise AFReportAlreadyExists(f"Report already exists: {c.report_path}")
-        print(f"SKIP because exists {c.report_path}")
-        # read 
-        with gzip.open(c.report_path, "rt", encoding="utf-8") as f:
-            result = json.load(f)  # Directly parse JSON
-        return result['score']
+    # if c.report_path.exists() and not force and not explain:    
+    if len(c.metrics) and not force and not explain:
+        logger.debug(f"Metrics already exist")
+        raise AFReportAlreadyExists(f"Metrics already exists")
+
+    
 
     c.relations = RelationDict(c)
 
