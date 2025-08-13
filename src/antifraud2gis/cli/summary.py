@@ -28,5 +28,5 @@ def printsummary():
     dbsession = DBSession()
 
     print("Nusers:", Author.nusers(dbsession=dbsession))
-    print(f"Companies: {dbsession.query(Company).count()}")
+    print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count()}")
     print(f"Reviews: {dbsession.query(Review).count()}")

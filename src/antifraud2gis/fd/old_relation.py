@@ -83,7 +83,7 @@ class RelationFD(BaseFD):
             # long_rels: count of risk (happy/high) relations WITHOUT top_town relations
             long_rels = sum(towncount.values()) - top_towns_rels
 
-        for rel in self._c.relations.relations.values():
+        for rel in self._c.relations.relations.values():    
             if rel.check_high_hits():
                 self.hirel += 1
 
