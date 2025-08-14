@@ -172,6 +172,24 @@ class Review(Base):
         return self.address.split(',')[0].replace(u'\xa0', u' ')
 
 
+    def as_dict(self) -> dict:
+        rdata = dict(
+            id=self.id,
+            author_id=self.author_id,
+            author_created=None,
+            object_id=self.object_id,
+            name=self.name,
+            provider=self.provider,            
+            rating=self.rating,
+            created=self.created.strftime("%Y-%m-%d %H:%M:%S")
+        )
+        if self.provider == "2gis":
+            rdata['author_created'] = self.author.created.strftime("%Y-%m-%d %H:%M:%S")
+        else:
+            rdata['author_created'] = None
+        
+        return rdata
+
     def __repr__(self):
         # print_json(data=self._data)
         from .author import Author

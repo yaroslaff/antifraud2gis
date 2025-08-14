@@ -478,6 +478,20 @@ class Company(Base):
                             .filter(Review.object_id == self.object_id)\
                             .scalar() or 0
 
+    def data_reviews(self, provider = None, dbsession = None):
+        from .review import Review
+
+        dbsession = dbsession or DBSession()
+
+        data = list()
+
+        with dbsession:
+            if provider is None:
+                for r in self.reviews:
+                    data.append(r.as_dict())
+                    
+        return data
+
 
     def wipe_metrics(self, dbsession: Session):
         for m in self.metrics:

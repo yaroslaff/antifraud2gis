@@ -138,6 +138,9 @@ aliases = {
     '70000001057669889': {
         'alias': 'sp',
         'remark': 'sametitle?'
+    },
+    '141265770417218': {
+        'alias': 'suncity'
     }
 }
 

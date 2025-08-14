@@ -317,6 +317,17 @@ class Author(Base):
 
             return _r.created
 
+    def data_reviews(self) -> list:
+        from .review import Review
+        data = list()
+        
+        with DBSession() as dbsession:
+            for rev in self.reviews:
+                # print(rev)
+                data.append(rev.as_dict())
+        return data
+
+
     def towns(self):
         self.load()
         towns = set()

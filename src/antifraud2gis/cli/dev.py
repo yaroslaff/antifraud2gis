@@ -20,6 +20,9 @@ import gzip
 import typer
 from datetime import datetime, date
 import dateutil
+from IPython import start_ipython
+import numpy as np
+import pandas as pd
 
 # import lmdb
 
@@ -45,6 +48,7 @@ from ..net.company_reviews import CompanyReviewsIterator
 from ..net.author_reviews import AuthorReviewsIterator
 
 from .metrics import metrics_app
+import pandas as pd
 
 def countdown(n=5):
     for i in range(n, 0, -1):
@@ -70,6 +74,7 @@ def arg_aliases():
     aa.alias("ca", "company-authors")
     aa.alias("cr", "company-reviews")
     aa.alias("crn", "company-reviews-net")
+    aa.alias("crd", "company-reviews-data")
     aa.alias("cf", "company-fetch")
 
     aa.alias("ar", "author-reviews")
@@ -98,6 +103,19 @@ app.add_typer(metrics_app, name="metrics")
 def app_callback(verbose: bool = verbose_option):
     """ Antifraud for 2GIS (dev tool) """    
     loginit(verbose)
+
+
+@app.command(name="shell")
+# @click.pass_context
+def cmd_shell():
+    ns = {
+        # "m": __import__("mymodule"),
+        "Company": Company,
+        "resolve_alias": resolve_alias
+    }
+    start_ipython(argv=[], user_ns=ns)
+
+
 
 @app.command(name="sys")
 # @click.pass_context
@@ -261,7 +279,7 @@ def queue(action: str = typer.Argument("show", help="Action: show (default) or r
 
 @app.command(name="company-reviews")
 def сompany_reviews(oid: str,
-        id_only: bool = typer.Option(False, "--id", "-i", help="Only ID of review")):
+        id_only: bool = typer.Option(False, "--id", "-i", help="Only this review")):
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
         c = Company.get(object_id=object_id, dbsession=dbsession)
@@ -270,6 +288,37 @@ def сompany_reviews(oid: str,
                 print(r.id)
             else:
                 print(r)
+
+
+
+# crd
+@app.command(name="company-reviews-data")
+def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id")):
+    object_id = resolve_alias(oid)
+    with DBSession() as dbsession:
+        c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+        data = c.data_reviews()
+
+    print_json(data=data)
+    cdf = pd.DataFrame(data)
+    print(cdf)
+    print("LEN:", len(cdf))
+
+
+    df = pd.DataFrame()
+    for author_id in cdf['author_id'].dropna().unique():
+        with DBSession() as dbsession:
+            # print(author_id)
+            a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession)
+            df = pd.concat([df, pd.DataFrame(a.data_reviews())], ignore_index=True)
+            print(len(df))
+
+    print(df.to_string())
+
+        # print(len(cdf['author_id'].dropna().unique()))
+        # print(cdf['author_id'].nunique())
+
+
 
 @app.command(name="company-reviews-net")
 def сompany_reviews_net(

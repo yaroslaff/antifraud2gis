@@ -20,7 +20,10 @@ dependencies = [
     # "lmdb",
     "sqlalchemy>=2.0.41",
     "typer",
-    "python-dateutil"
+    "python-dateutil",
+    "ipython",
+    "pandas",
+    "numpy"
     ]
 requires-python = ">=3.8"
 authors = [{ name = "Yaroslav Polyakov", email = "yaroslaff@gmail.com" }]
