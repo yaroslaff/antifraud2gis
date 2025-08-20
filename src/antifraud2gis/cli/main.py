@@ -175,6 +175,10 @@ def fraud(oid: str,
     with DBSession() as dbsession:
         object_id = resolve_alias(oid)
 
+        if object_id is None:
+            print(f"No such company ({oid})")
+            return
+
         try:
             c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession)
         except (AFNoCompany, AFNoTitle, AFCompanyError):

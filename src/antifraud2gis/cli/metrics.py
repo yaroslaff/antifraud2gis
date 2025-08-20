@@ -6,7 +6,7 @@ from ..db import DBSession
 from ..models.metric import Metric
 from ..models.company import Company
 from ..aliases import resolve_alias
-from ..metrics import all_metrics
+from ..metrics import run_metrics
 
 import pandas as pd
 
@@ -60,6 +60,9 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
 @metrics_app.command(name="run")
 def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     """ run metrics for company """
+
+    metrics = dict()
+
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
         c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
@@ -67,6 +70,24 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
 
     print_json(data=data)
     cdf = pd.DataFrame(data)
-    all_metrics(object_id, cdf)
+
+    cdf["author_created"] = pd.to_datetime(cdf["author_created"])
+    cdf["created"] = pd.to_datetime(cdf["created"])
+    cdf["age"] = (cdf["created"] - cdf["author_created"]).dt.days
+
+    run_metrics(object_id, cdf)
     print(cdf)
     print("LEN:", len(cdf))
+    print("mean/median age:", cdf["age"].mean(), cdf["age"].median())
+
+    metrics['mean_age'] = int(cdf.loc[cdf["provider"] == "2gis", "age"].mean())
+    metrics['median_age'] = int(cdf.loc[cdf["provider"] == "2gis", "age"].mean())
+    
+    
+    df_2gis = cdf.loc[(cdf["provider"] == "2gis") & (cdf["object_id"] == object_id)]
+    # print(df_2gis)
+
+    print("OBJECT_ID:")
+    print(cdf.groupby("object_id"))
+
+    print_json(data=metrics)

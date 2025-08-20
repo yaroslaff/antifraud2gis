@@ -3,6 +3,8 @@ from .db import DBSession
 from .settings import settings
 from .exceptions import AFNoCompany
 
+from typing import Optional
+
 aliases = {
     '70000001094664808': {
         'alias': 'manty',
@@ -144,7 +146,7 @@ aliases = {
     }
 }
 
-def resolve_alias(alias: str) -> str:    
+def resolve_alias(alias: str) -> str | None:
     for k, v in aliases.items():
         if v.get('alias') == alias:
             return k
@@ -153,8 +155,10 @@ def resolve_alias(alias: str) -> str:
     if alias == ":next":
         with DBSession() as dbsession:
             nxt = Company.random_next_company(dbsession=dbsession, city=settings.lock_city,)
-            print("Next:", nxt)
-            return str(nxt.object_id)
+            if nxt:
+                return str(nxt.object_id)
+            else:
+                return None
 
     else:
         if len(alias) < 15 or len(alias) > 17:

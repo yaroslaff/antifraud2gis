@@ -1,5 +1,5 @@
 import pandas as pd
 
-def all_metrics(df: pd.DataFrame):
+def run_metrics(object_id: str, df: pd.DataFrame):
     print("ALL")
     print(len(df))
