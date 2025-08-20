@@ -1,11 +1,16 @@
 import typer
 
+from rich import print_json
+
 from ..db import DBSession
 from ..models.metric import Metric
 from ..models.company import Company
 from ..aliases import resolve_alias
+from ..metrics import all_metrics
 
-metrics_app = typer.Typer()
+import pandas as pd
+
+metrics_app = typer.Typer(help="Metrics commands")
 
 @metrics_app.command(name="list")
 def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")):
@@ -50,3 +55,18 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
         #ndeleted = stmt.delete()
         #dbsession.commit()
         #print(f"deleted {ndeleted} metrics") 
+
+# cm 
+@metrics_app.command(name="run")
+def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
+    """ run metrics for company """
+    object_id = resolve_alias(oid)
+    with DBSession() as dbsession:
+        c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+        data = c.data_reviews()
+
+    print_json(data=data)
+    cdf = pd.DataFrame(data)
+    all_metrics(object_id, cdf)
+    print(cdf)
+    print("LEN:", len(cdf))

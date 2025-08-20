@@ -77,12 +77,14 @@ def arg_aliases():
     aa.alias("crd", "company-reviews-data")
     aa.alias("cf", "company-fetch")
 
+
     aa.alias("ar", "author-reviews")
     aa.alias("arn", "author-reviews-net")
     aa.alias("af", "author-fetch")
 
     aa.alias(["ml", "mls"], ["metrics", "list"])
     aa.alias("mw", ["metrics", "wipe"])
+    aa.alias("mr", ["metrics", "run"])
 
 
     aa.skip_flags()
@@ -289,8 +291,6 @@ def сompany_reviews(oid: str,
             else:
                 print(r)
 
-
-
 # crd
 @app.command(name="company-reviews-data")
 def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id")):
@@ -313,7 +313,10 @@ def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id"))
             df = pd.concat([df, pd.DataFrame(a.data_reviews())], ignore_index=True)
             print(len(df))
 
-    print(df.to_string())
+    print(df)
+    # print("Mem:", df.memory_usage(deep=True).sum() / 1024**2)
+    print(df['object_id'].value_counts().sort_values(ascending=False))
+
 
         # print(len(cdf['author_id'].dropna().unique()))
         # print(cdf['author_id'].nunique())

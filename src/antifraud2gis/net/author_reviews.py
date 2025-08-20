@@ -36,7 +36,7 @@ class AuthorReviewsIterator:
         if self.url is None:
             raise StopIteration
 
-        logger.debug(f"ITER Loading reviews p{self.page} for author {self.public_id} from {self.url}")
+        # logger.debug(f"ITER Loading reviews p{self.page} for author {self.public_id} from {self.url}")
         try:
             r = http_session.get(self.url)
         except requests.exceptions.RetryError as e:
@@ -61,7 +61,7 @@ class AuthorReviewsIterator:
         try:
             token = data['next_page_token']
         except KeyError:
-            logger.debug("no token in response")
+            # logger.debug("no token in response")
             self.url = None
             return
 
