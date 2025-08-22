@@ -22,7 +22,6 @@ class AuthorReviewsIterator:
         return self
 
     def __next__(self):
-
         while True:
             if not self._reviews:
                 self._load_next_page()
@@ -30,6 +29,8 @@ class AuthorReviewsIterator:
                 r = self._reviews.pop(0)
                 if 'review' in r:
                     return r['review']
+                else:
+                    pass
 
     def _load_next_page(self):
 
@@ -56,7 +57,11 @@ class AuthorReviewsIterator:
 
         data = r.json()
 
+
         self._reviews = data['content_feed']
+
+        # print("ZZZ LOADED", len(self._reviews))
+        print_json(data=self._reviews)
 
         try:
             token = data['next_page_token']

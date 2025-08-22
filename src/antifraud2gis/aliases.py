@@ -124,7 +124,10 @@ aliases = {
         'alias': 'revolution',
         'remark': 'very few reviews, good for quick tests'
     },
-
+    '70000001057636776': {
+        'alias': 'vilada',
+        'remark': 'very few reviews'
+    },
     '70000001035102877': {
         'alias': 'dikul',
         'remark': 'should be error, medical, no back-reviews'

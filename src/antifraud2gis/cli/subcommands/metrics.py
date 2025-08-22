@@ -2,11 +2,12 @@ import typer
 
 from rich import print_json
 
-from ..db import DBSession
-from ..models.metric import Metric
-from ..models.company import Company
-from ..aliases import resolve_alias
-from ..metrics import run_metrics
+from ...db import DBSession
+from ...models.metric import Metric
+from ...models.company import Company
+from ...models.author import Author
+from ...aliases import resolve_alias
+from ...metrics import run_metrics
 
 import pandas as pd
 
@@ -61,33 +62,24 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
 def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     """ run metrics for company """
 
-    metrics = dict()
-
     object_id = resolve_alias(oid)
+    assert(object_id is not None)
     with DBSession() as dbsession:
         c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
         data = c.data_reviews()
 
-    print_json(data=data)
+    # company df
     cdf = pd.DataFrame(data)
 
-    cdf["author_created"] = pd.to_datetime(cdf["author_created"])
-    cdf["created"] = pd.to_datetime(cdf["created"])
-    cdf["age"] = (cdf["created"] - cdf["author_created"]).dt.days
+    adf = pd.DataFrame()
+    for author_id in cdf['author_id'].dropna().unique():
+        with DBSession() as dbsession:
+            # print(author_id)
+            a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession)
+            adf = pd.concat([adf, pd.DataFrame(a.data_reviews())], ignore_index=True)
 
-    run_metrics(object_id, cdf)
-    print(cdf)
-    print("LEN:", len(cdf))
-    print("mean/median age:", cdf["age"].mean(), cdf["age"].median())
 
-    metrics['mean_age'] = int(cdf.loc[cdf["provider"] == "2gis", "age"].mean())
-    metrics['median_age'] = int(cdf.loc[cdf["provider"] == "2gis", "age"].mean())
-    
-    
-    df_2gis = cdf.loc[(cdf["provider"] == "2gis") & (cdf["object_id"] == object_id)]
-    # print(df_2gis)
+    metrics = run_metrics(object_id, cdf, adf)
 
-    print("OBJECT_ID:")
-    print(cdf.groupby("object_id"))
-
+    # total df
     print_json(data=metrics)

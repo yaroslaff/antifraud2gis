@@ -47,7 +47,9 @@ from ..db import DBSession, check_or_create_db
 from ..net.company_reviews import CompanyReviewsIterator
 from ..net.author_reviews import AuthorReviewsIterator
 
-from .metrics import metrics_app
+from .subcommands.metrics import metrics_app
+from .subcommands.author import author_app
+
 import pandas as pd
 
 def countdown(n=5):
@@ -78,9 +80,12 @@ def arg_aliases():
     aa.alias("cf", "company-fetch")
 
 
-    aa.alias("ar", "author-reviews")
-    aa.alias("arn", "author-reviews-net")
-    aa.alias("af", "author-fetch")
+    aa.alias("a", "author")
+    aa.alias("af", ["author", "fetch"])
+    aa.alias("ar", ["author", "reviews"])
+    aa.alias("arn", ["author", "reviews-net"])
+    aa.alias("arw", ["author", "reviews-wipe"])
+    aa.alias("af", ["author", "fetch"])
 
     aa.alias(["ml", "mls"], ["metrics", "list"])
     aa.alias("mw", ["metrics", "wipe"])
@@ -99,6 +104,7 @@ app = typer.Typer(add_completion=False,     context_settings={"help_option_names
 verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose output")
 
 app.add_typer(metrics_app, name="metrics")
+app.add_typer(author_app, name="author")
 
 
 @app.callback()
@@ -374,23 +380,6 @@ def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", help="Fe
             logger.error(e)
 
 
-@app.command(name="author-reviews")
-def author_reviews(public_id: str):
-    """ show reviews for user """
-    with DBSession() as dbsession:
-        a = Author.get_or_fetch(public_id=public_id,dbsession=dbsession)
-        for r in a.reviews:
-            print(r)
-
-@app.command(name="author-reviews-net")
-def author_reviews_net(public_id: str, brief: bool = typer.Option(False, "--brief", "-b", help="brief")):
-    """ show reviews for user """
-    ar = AuthorReviewsIterator(public_id=public_id)
-    for r in ar:
-        if brief:
-            print(f"{dateutil.parser.parse(r['date_created']).date()} {r['object']['id']} ({r['object']['address'].split(',')[0]}) {r['object']['name']} {r['rating']}")  
-        else:
-            print_json(data=r)
 
 def main():
     # args = get_args()
