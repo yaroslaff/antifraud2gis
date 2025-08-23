@@ -164,7 +164,7 @@ def resolve_alias(alias: str) -> str | None:
                 return None
 
     else:
-        if len(alias) < 15 or len(alias) > 17:
+        if (len(alias) < 15 or len(alias) > 17) and not alias.startswith('_test'):
             raise AFNoCompany(f"Invalid alias {alias!r}")
 
     return alias

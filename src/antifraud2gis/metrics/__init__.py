@@ -21,6 +21,17 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     
     
     rev_count = adf.groupby("author_id").size()
+    print(type(adf.groupby("author_id")))
+    print(type(rev_count))
+    print(rev_count)
+
+
+    adf["a_nr"] = adf.groupby("author_id")["id"].transform("count")
+    adf["o_nr"] = adf.groupby("object_id")["id"].transform("count")
+
+    print("ADF:")
+    print(adf[["author_id", "object_id", "a_nr", "o_nr"]].sort_values("o_nr", ascending=False).head(20))
+    print(adf.columns)
 
     metrics['median_rpa'] = rev_count.median()
     metrics['mean_rpa'] = round(rev_count.mean(), 1)
