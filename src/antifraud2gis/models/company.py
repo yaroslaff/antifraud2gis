@@ -68,7 +68,8 @@ class Company(Base):
 
     metrics_calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    reviews: Mapped[list["Review"]] = relationship(back_populates="company")
+    reviews: Mapped[list["Review"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+
     metrics: Mapped[list["Metric"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
     metrics_calculated: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
@@ -114,6 +115,17 @@ class Company(Base):
         # Try to load from DB AGAIN
         # c = dbsession.get(cls, object_id)
         return c
+
+    @classmethod
+    def get(cls, object_id: str, dbsession: Session = None) -> "Company":
+        # resolve alias
+        # object_id = resolve_alias(object_id)
+
+        if dbsession is None:
+            dbsession = DBSession()
+
+        company = dbsession.get(cls, object_id)
+        return company
 
     @classmethod
     def count(cls, dbsession: Session) -> int | None:

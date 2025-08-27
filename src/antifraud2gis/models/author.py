@@ -76,7 +76,8 @@ class Author(Base):
     @classmethod
     def get_or_fetch(cls, public_id: str, dbsession: Session) -> "Author":        
         # Try to load from DB
-        user = dbsession.get(cls, public_id)
+        # user = dbsession.get(cls, public_id)
+        user = cls.get(public_id, dbsession=dbsession)
         if user:
             return user
         
@@ -84,6 +85,11 @@ class Author(Base):
 
         return user
 
+    @classmethod
+    def get(cls, public_id: str, dbsession: Session) -> "Author":
+        # Try to load from DB
+        user = dbsession.get(cls, public_id)
+        return user
 
     @classmethod
     def fetch_base(cls, public_id: str, dbsession = None) -> 'Author':

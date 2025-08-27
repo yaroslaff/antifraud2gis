@@ -1,6 +1,28 @@
 import pandas as pd
+import datetime
+from ..settings import settings
+
+from ..db import DBSession, Session
+from ..models import Company, Metric
 
 
+def save_metrics(c: Company, metrics: dict, dbsession: Session):
+
+    print("SAVE METRICS")
+
+    for metric_name, value in metrics.items():
+
+        metric = dbsession.query(Metric).filter_by(company=c, name=metric_name).first()
+        if metric:
+            metric.value = value
+        else:
+            metric = Metric(company=c, name=metric_name, value=value)
+            dbsession.add(metric)
+
+    c.metrics_calculated = datetime.datetime.now()
+    c.metrics_signature = settings.param_fp()
+    dbsession.add(c)
+    dbsession.commit()
 
 
 def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[str, float]:
@@ -21,9 +43,17 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     
     
     rev_count = adf.groupby("author_id").size()
-    print(type(adf.groupby("author_id")))
-    print(type(rev_count))
+    print("REV COUNT")
     print(rev_count)
+
+    neighbour_count = adf.groupby("object_id").size()
+
+    neighbour_count = neighbour_count.drop(object_id, errors="ignore")
+    neighbour_count = neighbour_count[neighbour_count >= 2]
+
+    print("NEIGH count")
+    print(neighbour_count)
+
 
 
     adf["a_nr"] = adf.groupby("author_id")["id"].transform("count")
@@ -33,8 +63,28 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     print(adf[["author_id", "object_id", "a_nr", "o_nr"]].sort_values("o_nr", ascending=False).head(20))
     print(adf.columns)
 
-    metrics['median_rpa'] = rev_count.median()
-    metrics['mean_rpa'] = round(rev_count.mean(), 1)
+
+    nbr = adf.groupby("author_id")["o_nr"].mean()
+    print("=== mean_o_nr")
+    print(nbr)
+    print(nbr.mean(), nbr.median())
+
+    metrics['nbr:mean'] = round(nbr.mean(),2)
+    metrics['nbr:median'] = round(nbr.median(),2)
+
+    # R1: ratio of unique reviews (no neighbours) to total reviews
+    r1 = adf.groupby("author_id")["o_nr"].apply(lambda x: (x == 1).sum() / len(x))
+    print("== ratio1")
+    print(r1)
+    print(r1.mean(), r1.median())
+
+    metrics['r1:mean'] = round(r1.mean(),2)
+    metrics['r1:median'] = round(r1.median(),2)
+
+
+
+    metrics['rpa:median'] = rev_count.median()
+    metrics['rpa:mean'] = round(rev_count.mean(), 1)
     
     
     
@@ -54,6 +104,5 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
 
     metrics['author_uniq_mean'] = round(res['uniqp'].mean(), 1)
     metrics['author_uniq_median'] = round(res['uniqp'].median(), 1)
-
 
     return metrics

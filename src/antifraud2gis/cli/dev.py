@@ -46,7 +46,7 @@ from ..session import http_session
 from ..db import DBSession, check_or_create_db
 from ..net.company_reviews import CompanyReviewsIterator
 from ..net.author_reviews import AuthorReviewsIterator
-from ..testdata import create_test_records
+from ..testdata import create_test_records, wipe_test_records
 
 from .subcommands.metrics import metrics_app
 from .subcommands.author import author_app
@@ -177,6 +177,10 @@ def cmd_sys():
 def init():
     check_or_create_db()
     create_test_records()
+
+@app.command()
+def rmtest():
+    wipe_test_records()
 
 
 @app.command()

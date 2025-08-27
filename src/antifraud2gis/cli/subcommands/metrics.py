@@ -7,7 +7,8 @@ from ...models.metric import Metric
 from ...models.company import Company
 from ...models.author import Author
 from ...aliases import resolve_alias
-from ...metrics import run_metrics
+from ...metrics import run_metrics, save_metrics
+from ...logger import logger
 
 import pandas as pd
 
@@ -66,8 +67,10 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     assert(object_id is not None)
     with DBSession() as dbsession:
         c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+        print(f"Process {c}")
         data = c.data_reviews()
 
+    logger.debug(f"Load {len(data)} authors...")
     # company df
     cdf = pd.DataFrame(data)
 
@@ -78,8 +81,9 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
             a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession)
             adf = pd.concat([adf, pd.DataFrame(a.data_reviews())], ignore_index=True)
 
-
-    metrics = run_metrics(object_id, cdf, adf)
+    logger.debug("Running metrics...")
+    metrics = run_metrics(c.object_id, cdf, adf)
+    save_metrics(c, metrics=metrics, dbsession=dbsession)
 
     # total df
     print_json(data=metrics)
