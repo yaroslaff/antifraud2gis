@@ -228,8 +228,6 @@ class Company(Base):
                 if r['provider'] == '2gis' and public_id is not None and public_id != '':
                     # public_id '' on https://2gis.ru/novosibirsk/firm/70000001099934045/
 
-                    print_json(data=r)
-
                     try:
                         u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
                     except AFAuthorUnavailable as e:
