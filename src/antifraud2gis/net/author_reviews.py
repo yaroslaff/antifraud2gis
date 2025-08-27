@@ -60,9 +60,6 @@ class AuthorReviewsIterator:
 
         self._reviews = data['content_feed']
 
-        # print("ZZZ LOADED", len(self._reviews))
-        print_json(data=self._reviews)
-
         try:
             token = data['next_page_token']
         except KeyError:

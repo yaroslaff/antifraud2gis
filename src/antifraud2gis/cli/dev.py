@@ -216,9 +216,23 @@ def submit(
     oid: str = typer.Argument(help="2GIS object_id"),
     force: bool = typer.Option(False, "--force", "-f", help="Force recalculation")):
     """ submit task for worker """
+
+    r = redis.Redis(decode_responses=True)
+    tasks = r.lrange(REDIS_TASK_QUEUE_NAME, 0, -1)  # возвращает list of bytes    
+    if len(tasks) >= settings.max_queue:
+        print(f"Queue is full ({len(tasks)}). Try again later.")
+        time.sleep(settings.sleep)
+        return
+
     object_id = resolve_alias(oid)
+
+    if object_id is None:
+        print(f"No object_id for {oid}")
+        return
+
     with DBSession() as dbsession:
         # create record in db if needed (to ensure company exists)
+        # this is SHORT request
         _c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
 
     submit_fraud_task(object_id, force=force)

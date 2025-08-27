@@ -33,6 +33,8 @@ class Settings():
 
         # location-specific
         self.lock_city = os.getenv("LOCK_CITY")
+        self.sleep = int(os.getenv("SLEEP", "10"))
+        self.max_queue = int(os.getenv("MAX_QUEUE", "10"))
 
         # Relations-specific
         self.risk_hit_th = int(os.getenv('RISK_HIT', '10'))

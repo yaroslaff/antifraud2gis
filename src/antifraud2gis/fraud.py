@@ -38,7 +38,7 @@ def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
 
     # notes = Usernotes()
 
-    logger.debug("Run fraud detection for", c)
+    logger.debug(f"Run fraud detection for {c}")
 
 
 

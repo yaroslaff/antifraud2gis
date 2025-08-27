@@ -3,8 +3,10 @@ import time
 import os
 import redis
 import json
+
 # from filelock import FileLock, Timeout
 from .fraud import detect
+from .settings import settings
 from .models.company import Company
 from .exceptions import AFNoCompany, AFReportAlreadyExists, AFCompanyNotFound
 from .logger import logger
@@ -28,7 +30,7 @@ started = time.time()
 processed = 0
 
 def get_qsize():
-    return r.llen(REDIS_DRAMATIQ_QUEUE)    
+    return r.llen(REDIS_DRAMATIQ_QUEUE)
 
 def cooldown_queue(maxq: int):
     printed = False
@@ -103,9 +105,13 @@ def fraud_task(oid: str, force=False):
     
     processed += 1
 
+
     logger.info(f"Worker: {oid!r} processed in {int(time.time() - task_started)} sec")
     logger.info(f"Worker total: {processed} tasks in {int(time.time() - started)} sec")
     logger.info(statistics)
+    logger.info(f"Sleep {settings.sleep} seconds")
+    time.sleep(settings.sleep)
+    logger.info(f"Worker: {oid!r} finished, ready for next task")
 
 
 def submit_fraud_task(oid: str, force: bool = False):
