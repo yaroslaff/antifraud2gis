@@ -37,3 +37,25 @@ def create_test_records():
         print("commit")
         dbsession.commit()
 
+def wipe_test_records():
+    print("wipe test records")
+
+    test_companies = ['_test1']
+    test_authors = ['_testa:1']
+
+    with DBSession() as dbsession:
+
+        for c in test_companies:
+            _company = Company.get(c, dbsession)
+            if _company:
+                print("delete company:", _company)
+                dbsession.delete(_company)
+
+
+        for a in test_authors:
+            _author = Author.get_or_fetch(a, dbsession)
+            if _author:
+                print("delete author:", _author)
+                dbsession.delete(_author)
+
+        dbsession.commit()

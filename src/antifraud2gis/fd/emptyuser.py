@@ -84,5 +84,8 @@ class EmptyUserFD(BaseFD):
         print("", file=fh)
 
     def metrics(self):
-        empty_user_rate = round(100 * len(self.empty_ratings) / (len(self.empty_ratings) + len(self.non_empty_ratings)), 1)
+        try:
+            empty_user_rate = round(100 * len(self.empty_ratings) / (len(self.empty_ratings) + len(self.non_empty_ratings)), 1)
+        except ZeroDivisionError:
+            empty_user_rate = 0
         return dict(empty_user_rate=empty_user_rate)
