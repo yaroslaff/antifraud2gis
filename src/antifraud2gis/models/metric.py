@@ -11,7 +11,7 @@ class Metric(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
-    value: Mapped[float] = mapped_column(Float, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=True)
 
     company_id: Mapped[str] = mapped_column(ForeignKey("company.object_id"), nullable=False)
     company: Mapped["Company"] = relationship(back_populates="metrics")

@@ -153,10 +153,12 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     cdf2gis['author_created_ym'] = cdf2gis['author_created'].dt.strftime('%Y%m')
     
     ym = cdf2gis.groupby('author_created_ym')['author_id'].nunique().sort_values()
-    
+
     metrics['zodiacym:max'] = int(ym.max())
-    metrics['zodiacym:std'] = round(ym.std(), 2)
+
+    metrics['zodiacym:std'] = round(ym.std(), 2) 
     metrics['zodiacym:cv'] = round(ym.std() / ym.mean(), 2)
+
     metrics['zodiacym:len'] = len(ym)
     metrics['zodiacym:ratio'] = round(len(ym)/len(cdf2gis), 2)
 

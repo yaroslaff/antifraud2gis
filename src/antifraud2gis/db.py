@@ -53,12 +53,14 @@ def createdb():
     return
 
 def check_or_create_db():
-    from .models.author import Author
+    from .models import Author, Metric
 
     with DBSession() as dbsession:
         try:
             # n_users = dbsession.query(User).count()
             n_users = Author.nusers(dbsession=dbsession)
+            n_metrics = dbsession.query(Metric).count()
+
         except OperationalError as e:
             print("No db file? Create it")
             createdb()
