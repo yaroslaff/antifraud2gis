@@ -35,6 +35,17 @@ aliases = {
         'tags': 'x'
     },
 
+    '70000001079658519':{
+        'alias': 'nashamarka',
+        'tags': 'x'
+    },
+
+    '70000001027452411':{
+        'alias': 'aragvi',
+        'tags': 'x'
+    },
+
+
     '141265769369926': {
         'alias': 'nskg',
     },

@@ -22,7 +22,7 @@ from requests.exceptions import RequestException
 from typing import Generator, Iterator
 from random import randint
 
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 
 from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, func, select, or_, and_
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor, Session, noload
@@ -492,19 +492,24 @@ class Company(Base):
                             .filter(Review.object_id == self.object_id)\
                             .scalar() or 0
 
-    def data_reviews(self, provider = None, dbsession = None):
+    def data_reviews(self, provider = None, dbsession = None, days = None):
         from .review import Review
 
-        dbsession = dbsession or DBSession()
+        # dbsession = dbsession or DBSession()
 
-        data = list()
+        days = days or settings.max_review_age
 
-        with dbsession:
-            if provider is None:
-                for r in self.reviews:
-                    data.append(r.as_dict())
-                    
-        return data
+
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        with dbsession or DBSession() as dbsession:
+            recent_reviews = dbsession.query(Review).filter(
+                Review.object_id == self.object_id,
+                Review.created >= cutoff
+            ).all()
+
+            data = [r.as_dict() for r in recent_reviews]
+            return data
 
 
     def wipe_metrics(self, dbsession: Session):

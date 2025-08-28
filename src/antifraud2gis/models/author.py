@@ -8,7 +8,7 @@ from rich.pretty import Pretty
 from rich import print_json
 import traceback
 import sys
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import gzip
 # import lmdb
 import tempfile
@@ -204,15 +204,22 @@ class Author(Base):
 
             return _r.created
 
-    def data_reviews(self) -> list:
+    def data_reviews(self, dbsession: Session | None = None, days=None) -> list:
         from .review import Review
         data = list()
         
-        with DBSession() as dbsession:
-            for rev in self.reviews:
-                # print(rev)
-                data.append(rev.as_dict())
-        return data
+
+        days = days or settings.max_review_age
+        cutoff = datetime.now(timezone.utc) - timedelta(days=settings.max_review_age)
+
+        with dbsession or DBSession() as dbsession:
+            recent_reviews = dbsession.query(Review).filter(
+                Review.author_id == self.public_id,
+                Review.created >= cutoff
+            ).all()
+
+            data = [r.as_dict() for r in recent_reviews]
+            return data
 
 
     def towns(self):

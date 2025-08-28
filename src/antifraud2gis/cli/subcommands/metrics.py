@@ -1,16 +1,18 @@
 import typer
 
 from rich import print_json
+import pandas as pd
+from sqlalchemy import select, func, and_
 
-from ...db import DBSession
+from ...db import DBSession, Session
 from ...models.metric import Metric
 from ...models.company import Company
 from ...models.author import Author
 from ...aliases import resolve_alias
 from ...metrics import run_metrics, save_metrics
 from ...logger import logger
+from ...exceptions import AFNoCompany
 
-import pandas as pd
 
 metrics_app = typer.Typer(help="Metrics commands")
 
@@ -59,31 +61,81 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
         #print(f"deleted {ndeleted} metrics") 
 
 # cm 
+
+
+def metrics_run_code(c: Company):
+    with DBSession() as dbsession:
+        c = dbsession.merge(c)
+
+        c.full_load(dbsession=dbsession)                        
+        data = c.data_reviews()
+
+        print(f"calc:{c.metrics_calculated} sig:{c.metrics_signature}")
+
+
+        logger.debug(f"Load {len(data)} authors...")
+        # company df
+        cdf = pd.DataFrame(data)
+
+        adf = pd.DataFrame()
+        for author_id in cdf['author_id'].dropna().unique():
+            with DBSession() as dbsession2:
+                # print(author_id)
+                a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession2)
+                adf = pd.concat([adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))], ignore_index=True)
+
+
+        logger.debug("Running metrics...")
+        metrics = run_metrics(c.object_id, cdf, adf)
+        save_metrics(c, metrics=metrics, dbsession=dbsession)
+
+        # total df    
+        print_json(data=metrics)
+
+
 @metrics_app.command(name="run")
 def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     """ run metrics for company """
 
-    object_id = resolve_alias(oid)
-    assert(object_id is not None)
-    with DBSession() as dbsession:
-        c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
-        print(f"Process {c}")
-        data = c.data_reviews()
 
-    logger.debug(f"Load {len(data)} authors...")
-    # company df
-    cdf = pd.DataFrame(data)
+    if oid == "all":
 
-    adf = pd.DataFrame()
-    for author_id in cdf['author_id'].dropna().unique():
+
+
         with DBSession() as dbsession:
-            # print(author_id)
-            a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession)
-            adf = pd.concat([adf, pd.DataFrame(a.data_reviews())], ignore_index=True)
 
-    logger.debug("Running metrics...")
-    metrics = run_metrics(c.object_id, cdf, adf)
-    save_metrics(c, metrics=metrics, dbsession=dbsession)
+            total = dbsession.scalar(
+                select(func.count()).select_from(Company).where(
+                    and_(
+                        Company.metrics_calculated.is_(None),
+                        Company.updated_at.isnot(None)
+                    ))
 
-    # total df
-    print_json(data=metrics)
+
+
+            )
+            print(f"Total: {total} companies to do")
+
+            for idx, c in enumerate(dbsession.scalars(
+                select(Company).where(
+                    and_(Company.metrics_calculated.is_(None),
+                    Company.updated_at.isnot(None)
+                )
+            )), start=1):
+                print(f"{idx}/{total} {c}")
+                metrics_run_code(c)
+
+
+    else:
+        try:
+            object_id = resolve_alias(oid)
+        except AFNoCompany:
+            logger.error(f"Company {oid} not found")
+            return
+
+        assert(object_id is not None)
+        with DBSession() as dbsession:
+            c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+
+        metrics_run_code(c)
+

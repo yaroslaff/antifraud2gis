@@ -28,6 +28,8 @@ class Review(Base):
     author: Mapped[Author] = relationship(back_populates="reviews")
     company: Mapped[Company] = relationship(back_populates="reviews")
 
+
+
     # _user: 'User'
 
     def __old_init1__( self,
@@ -181,13 +183,16 @@ class Review(Base):
             name=self.name,
             provider=self.provider,            
             rating=self.rating,
-            created=self.created.strftime("%Y-%m-%d %H:%M:%S")
+            created=self.created.strftime("%Y-%m-%d %H:%M:%S"),
+            # author_age: how old was autho
+            author_age=(self.created - self.author.created).days if self.author else None,                        
+            review_age = (datetime.now() - self.created).days
         )
         if self.provider == "2gis":
             rdata['author_created'] = self.author.created.strftime("%Y-%m-%d %H:%M:%S")
         else:
             rdata['author_created'] = None
-        
+
         return rdata
 
     def __repr__(self):
