@@ -117,7 +117,7 @@ class Review(Base):
 
     @property
     def name(self) -> str:
-        if self._name:
+        if self._name is not None:
             return f'{self.provider}:{self._name}'
         else:
             return self.author.name
@@ -175,6 +175,7 @@ class Review(Base):
 
 
     def as_dict(self) -> dict:
+
         rdata = dict(
             id=self.id,
             author_id=self.author_id,
