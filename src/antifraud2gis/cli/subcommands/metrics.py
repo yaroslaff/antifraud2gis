@@ -3,6 +3,7 @@ import typer
 from rich import print_json
 import pandas as pd
 from sqlalchemy import select, func, and_
+import time
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
@@ -43,7 +44,7 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
     print("wipe metrics...", object_id)
 
     with DBSession() as dbsession:
-        if oid.lower() == 'all':
+        if oid.lower() == ':all':
             print("wipe metrics for ALL companies")
             for c in dbsession.query(Company).filter(Company.metrics_calculated != None):
                 print("..", c)
@@ -103,6 +104,9 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
 
 
     if oid == ":all":
+
+        started = time.time()
+
         with DBSession() as dbsession:
 
             total = dbsession.scalar(
@@ -120,7 +124,7 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
                     Company.updated_at.isnot(None),
                     Company.error.is_(None)
             )), start=1):
-                print(f"{idx}/{total} {c}")
+                print(f"{idx}/{total} uptime: {int(time.time() - started)}s {c}")
                 metrics_run_code(c)
 
 

@@ -26,8 +26,6 @@ def main():
     set_status("worker started")
     r.set(REDIS_WORKER_STARTED, time.time())
 
-    
-
     dramatiq_main()
 
 if __name__ == "__main__":
