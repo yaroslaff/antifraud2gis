@@ -67,11 +67,15 @@ def metrics_run_code(c: Company):
     with DBSession() as dbsession:
         c = dbsession.merge(c)
 
-        c.full_load(dbsession=dbsession)                        
+        try:
+            c.full_load(dbsession=dbsession)
+        except AFNoCompany as e:
+            logger.error(e)
+            c.error = str(e)
+            dbsession.commit()
+            return
+        
         data = c.data_reviews()
-
-        print(f"calc:{c.metrics_calculated} sig:{c.metrics_signature}")
-
 
         logger.debug(f"Load {len(data)} authors...")
         # company df
@@ -98,10 +102,7 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     """ run metrics for company """
 
 
-    if oid == "all":
-
-
-
+    if oid == ":all":
         with DBSession() as dbsession:
 
             total = dbsession.scalar(
@@ -110,17 +111,14 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
                         Company.metrics_calculated.is_(None),
                         Company.updated_at.isnot(None)
                     ))
-
-
-
             )
             print(f"Total: {total} companies to do")
 
             for idx, c in enumerate(dbsession.scalars(
                 select(Company).where(
-                    and_(Company.metrics_calculated.is_(None),
-                    Company.updated_at.isnot(None)
-                )
+                    Company.metrics_calculated.is_(None),
+                    Company.updated_at.isnot(None),
+                    Company.error.is_(None)
             )), start=1):
                 print(f"{idx}/{total} {c}")
                 metrics_run_code(c)
@@ -128,7 +126,7 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
 
     else:
         try:
-            object_id = resolve_alias(oid)
+            object_id = resolve_alias(oid, purpose="metrics")
         except AFNoCompany:
             logger.error(f"Company {oid} not found")
             return

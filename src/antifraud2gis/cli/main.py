@@ -126,9 +126,12 @@ def info(oid: str):
     """ info about company """
     with DBSession() as dbsession:
         object_id = resolve_alias(oid)
-
+        assert object_id is not None
         try:
-            c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            if c is None:
+                print("Not found company locally, loading from network")
+                c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
         except (AFNoCompany, AFNoTitle):
             print(f"Company {oid} not found")
             return
@@ -241,10 +244,15 @@ def main():
 
     elif args.cmd == "info":
 
+        object_id=resolve_alias(args.company)
         with DBSession() as dbsession:
 
             try:
-                c = Company.get_or_fetch(object_id=resolve_alias(args.company), dbsession=dbsession, full=False)
+                c = Company.get(object_id=object_id, dbsession=dbsession)
+                if c is None:
+                    print("Locally loaded C:", c)
+                    print(f"Company {args.company} not found in database")
+                    c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
             except (AFNoCompany, AFNoTitle):
                 print(f"Company {args.company} not found")
                 return

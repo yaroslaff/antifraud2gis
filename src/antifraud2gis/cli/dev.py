@@ -50,6 +50,7 @@ from ..testdata import create_test_records, wipe_test_records
 
 from .subcommands.metrics import metrics_app
 from .subcommands.author import author_app
+from .subcommands.company import company_app
 
 import pandas as pd
 
@@ -74,11 +75,14 @@ def handle_dev(args: argparse.Namespace):
 def arg_aliases():
     aa = ArgAlias()
     aa.alias("q" , "queue")
-    aa.alias("ca", "company-authors")
-    aa.alias("cr", "company-reviews")
-    aa.alias("crn", "company-reviews-net")
-    aa.alias("crd", "company-reviews-data")
-    aa.alias("cf", "company-fetch")
+
+    aa.alias("c" , "company")
+    aa.alias("ca", ["company", "authors"])
+    aa.alias("cr", ["company", "reviews"])
+    aa.alias("crn", ["company", "reviews-net"])
+    aa.alias("crd", ["company", "reviews-data"])
+    aa.alias("cf", ["company", "fetch"])
+    aa.alias("cw", ["company", "wipe"])
 
 
     aa.alias("a", "author")
@@ -106,7 +110,7 @@ verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose out
 
 app.add_typer(metrics_app, name="metrics")
 app.add_typer(author_app, name="author")
-
+app.add_typer(company_app, name="company")
 
 @app.callback()
 def app_callback(verbose: bool = verbose_option):
@@ -166,7 +170,6 @@ def cmd_sys():
         print(f"Session HTTP response code: {r.status_code}")
     except requests.exceptions.RequestException as e:
         print(f"Direct HTTP reviews request error: {e}")
-
 
     data = r.json()
     print(f"Meta code: {data['meta']['code']}, rating:{data['meta']['branch_rating']} count: {data['meta']['branch_reviews_count']}/{data['meta']['total_count']}")
@@ -305,99 +308,6 @@ def queue(action: str = typer.Argument("show", help="Action: show (default) or r
 
 
 
-@app.command(name="company-reviews")
-def сompany_reviews(oid: str,
-        id_only: bool = typer.Option(False, "--id", "-i", help="Only this review")):
-    object_id = resolve_alias(oid)
-    with DBSession() as dbsession:
-        c = Company.get(object_id=object_id, dbsession=dbsession)
-        for r in c.reviews:
-            if id_only:
-                print(r.id)
-            else:
-                print(r)
-
-# crd
-@app.command(name="company-reviews-data")
-def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id")):
-    object_id = resolve_alias(oid)
-    with DBSession() as dbsession:
-        c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
-        data = c.data_reviews()
-
-    print_json(data=data)
-    cdf = pd.DataFrame(data)
-    print(cdf)
-    print("LEN:", len(cdf))
-
-
-    df = pd.DataFrame()
-    for author_id in cdf['author_id'].dropna().unique():
-        with DBSession() as dbsession:
-            # print(author_id)
-            a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession)
-            df = pd.concat([df, pd.DataFrame(a.data_reviews())], ignore_index=True)
-            print(len(df))
-
-    print(df)
-    # print("Mem:", df.memory_usage(deep=True).sum() / 1024**2)
-    print(df['object_id'].value_counts().sort_values(ascending=False))
-
-
-        # print(len(cdf['author_id'].dropna().unique()))
-        # print(cdf['author_id'].nunique())
-
-
-
-@app.command(name="company-reviews-net")
-def сompany_reviews_net(
-    oid: str,
-    public_id: str = typer.Argument(None, help="Dump only this review"),
-    datestr: str = typer.Option(
-        None,
-        "-d",
-        "--date",
-        help="Optional date (YYYY-MM-DD). Defaults to None.")
-    ):
-
-    """ get reviews from network and dump it (crn) """
-
-    object_id = resolve_alias(oid)    
-    cr = CompanyReviewsIterator(object_id=object_id)
-    needle_date = None
-
-    if datestr:
-        needle_date = dateutil.parser.parse(datestr).date()
-
-    for r in cr:
-        if public_id and r['user']['public_id'] != public_id:
-            continue
-        if needle_date:
-            review_date = dateutil.parser.parse(r['date_created']).date()
-            if review_date != needle_date:
-                continue
-        print_json(data=r)
-
-
-
-@app.command(name="company-authors")
-def сompany_authors(oid: str):
-    with DBSession() as dbsession:
-        object_id = resolve_alias(oid)
-
-        c = Company.get(object_id=object_id, dbsession=dbsession)
-        print(f"# {c.info(dbsession=dbsession)}")
-        for r in c.authors():
-            print(r)
-
-@app.command(name="company-fetch")
-def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", help="Fetch full company data")):
-    object_id = resolve_alias(oid)
-    with DBSession() as dbsession:
-        try:
-            c = Company.fetch(object_id=object_id, full=full, dbsession=dbsession)
-        except AFNoCompany as e:
-            logger.error(e)
 
 
 

@@ -8,7 +8,7 @@ class CompanyReviewsIterator:
     def __init__(self, object_id: str):
         self.object_id = object_id
         self.url = f'https://public-api.reviews.2gis.com/2.0/branches/{self.object_id}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
-        self.page = 1
+        self.pages_loaded = 0 # increased only for page with 1+ reviews
         self.meta = None
         self._reviews = []
 
@@ -35,7 +35,6 @@ class CompanyReviewsIterator:
                 print("RequestException", e)
                 time.sleep(1)
                 
-
         if r.status_code == 400:
             raise NotImplementedError
 
@@ -46,6 +45,8 @@ class CompanyReviewsIterator:
         self.meta = data['meta']
 
         self._reviews = data['reviews']
+        if self._reviews:
+            self.pages_loaded += 1
 
         # next page
         self.url = data['meta'].get('next_link')

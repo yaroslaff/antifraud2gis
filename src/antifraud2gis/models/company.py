@@ -148,6 +148,7 @@ class Company(Base):
             cls.updated_at.is_(None),
             cls.error.is_(None)
         )
+
         if city:
             base_query = base_query.where(cls.city == city)
 
@@ -185,7 +186,7 @@ class Company(Base):
         if self.is_loaded():
             return
         
-        print("full_load: not loaded:", self)
+        print("full_load: not loaded yet, loading", self)
         Company.fetch(object_id=self.object_id, full=True, dbsession=dbsession)
 
     @classmethod
@@ -221,7 +222,6 @@ class Company(Base):
             task = progress.add_task("[cyan]Loading users...", total=None)            
 
             for r in cr:
-
                 if meta is None:
                     meta = cr.meta
                     progress_total = meta['total_count']
@@ -259,6 +259,9 @@ class Company(Base):
                             return company
                 else:
                     ext_reviews.append(r)
+
+        if cr.pages_loaded == 0:
+            cls.check_company_alive(object_id=object_id)
 
         # loaded all pages
         company = dbsession.get(cls, object_id)
@@ -306,155 +309,19 @@ class Company(Base):
 
         return company
 
-
-
     @classmethod
-    def UNUSED_fetch(cls, object_id: str, full=False, dbsession=None) -> "Company":
-
-        from .review import Review
-        dbsession = dbsession or scoped_db_session()
-        # print(f"FETCH {object_id} full: {full} caller: {caller()}")
-
-        """ Fetch ALL reviews for company (all users) + update meta """
-
-        url = f'https://public-api.reviews.2gis.com/2.0/branches/{object_id}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
-
-        meta = None
-
-        page=0
-
-        ext_reviews = list()
-
-        progress_total = None
-        current_review_idx = 1
-
-
-        # fetch statistics
-        stats_reviews = 0
-        stats_2gis = 0
-        stats_private = 0
-        stats_public_2gis = 0 
-
-
-        with Progress(
-            SpinnerColumn(),
-            BarColumn(),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            TextColumn("[green]{task.description}"),  # перенесли в конец
-        ) as progress:
-            task = progress.add_task("[cyan]Loading users...", total=None)            
-
-            while url:
-                if ':8080' in url:
-                    logger.debug(f'strip :8080 from {url}')
-                    url = url.replace(':8080', '')
-                logger.debug(f".. load company reviews p{page} for {object_id}: {url}")
-                r = None
-                while r is None:
-
-                    try:                    
-                        r = http_session.get(url)
-                    except RequestException as e:
-                        print("RequestException", e)
-                        time.sleep(1)
-                
-
-                if r.status_code == 400:
-                    raise NotImplementedError
-
-                r.raise_for_status()
-
-                data = r.json()
-
-                if meta is None:
-                    meta = data['meta']
-                    progress_total = data['meta']['total_count']
-                    progress.update(task, total=progress_total)
-
-                for r in data['reviews']:
-                    public_id = r['user']['public_id']
-
-
-                    stats_reviews += 1
-                    if r['user']['provider'] == '2gis':
-                        stats_2gis += 1
-
-                    current_review_idx += 1 
-                    progress.update(task, advance=1, description=f"[green]User {r['user']['public_id']}: {r['user']['name']}")
-
-                    if public_id is not None:
-                        u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
-                        
-                        if u.private:
-                            stats_private += 1
-                        else:
-                            stats_public_2gis += 1
-
-                        if not full:
-                            # maybe we can skip here?
-                            company = dbsession.get(cls, object_id)
-                            if company:
-                                print(f"Short-loaded {object_id}")
-                                return company
-                    else:
-                        ext_reviews.append(r)
-
-                # self._reviews.extend(data['reviews'])
-                url = data['meta'].get('next_link')
-                logger.debug(f'next_link: {url}')
-                time.sleep(SLEEPTIME)
-
-                page+=1
-
-        # loaded all pages
-        company = dbsession.get(cls, object_id)
-        if company is None:           
-            raise AFNoCompany(f"Total: {stats_reviews}, pub 2gis profiles: {stats_public_2gis} private profiles: {stats_private}")
-
-        if ext_reviews:
-            saved_ext_reviews = 0
-            for _r in ext_reviews:
-
-                if not Review.exists(_r['id'], dbsession=dbsession):
-                    _review = Review(
-                        id=_r['id'],
-                        author=None,
-                        company=company,
-                        _name = _r['user']['name'],
-                        provider=_r['provider'],
-                        rating=_r['rating'],
-                        created = datetime.fromisoformat(_r['date_created'])
-                    )
-                    dbsession.add(_review)
-                    saved_ext_reviews += 1
-
-            print(f"Saved {saved_ext_reviews}/{len(ext_reviews)} external review(s)")
-
-            dbsession.commit()
-
-        # if company.rating_2gis is None:
-        if True:
-            company.count_2gis = meta['total_count']
-            company.branch_count_2gis = meta['branch_reviews_count']
-            company.rating_2gis = meta['branch_rating']
-            company.updated_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
-
-            dbsession.add(company)
-            dbsession.commit()
-
-
-        logger.info(f"Company {object_id}: loaded from network {company.nreviews()} reviews")
-        # why we were called?
-        # print("----------")
-        # print("".join(traceback.format_stack(limit=10)))         
-
-        statistics.total_companies_loaded+=1
-        statistics.total_companies_loaded_network+=1
-
-        return company
-
+    def check_company_alive(self, object_id: str):
+        start_town = 'moscow'
+        r = http_session.head(f'https://2gis.ru/{start_town}/firm/{object_id}', allow_redirects=True)
+        if False and r.history:
+            print("Redirected")
+            print("Final URL:", r.url)
+            print("Redirect chain:")
+            for resp in r.history:
+                print(resp.status_code, "->", resp.headers.get("Location"))
+        
+        if r.status_code == 410:
+            raise AFNoCompany(f'Company deleted: 2gis returned 410 for {r.url}')
 
 
     def count_rate(self):
@@ -471,7 +338,7 @@ class Company(Base):
     def __repr__(self):
 
         if self.error:
-            return f'Company({self.object_id} {self.title!r} ERR:{self.error})'
+            return f'Company({self.object_id} {self.title!r} ERR: {self.error!r})'
            
         tags = " "
 

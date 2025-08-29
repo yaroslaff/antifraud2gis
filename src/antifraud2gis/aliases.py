@@ -1,9 +1,11 @@
+from typing import Optional
+from sqlalchemy import select, func
+from random import randint
+
 from .models.company import Company
 from .db import DBSession
 from .settings import settings
 from .exceptions import AFNoCompany
-
-from typing import Optional
 
 aliases = {
     '70000001094664808': {
@@ -160,20 +162,44 @@ aliases = {
     }
 }
 
-def resolve_alias(alias: str) -> str | None:
-    for k, v in aliases.items():
-        if v.get('alias') == alias:
-            return k
-        
-    # not an alias
-    if alias == ":next":
+
+def random_next(purpose: str = "fraud"):
+    if purpose == "fraud":
         with DBSession() as dbsession:
             nxt = Company.random_next_company(dbsession=dbsession, city=settings.lock_city,)
             if nxt:
                 return str(nxt.object_id)
             else:
                 return None
+    elif purpose == "metrics":
+        with DBSession() as dbsession:
 
+            base = select(Company).where(
+                Company.metrics_calculated.is_(None),
+                Company.updated_at.isnot(None),
+                Company.error.is_(None)
+            )
+            count = dbsession.scalar(
+                base.with_only_columns(func.count()).order_by(None)
+            )
+            assert count is not None
+            offset = randint(0, min(count, 100))
+            c = dbsession.scalars(base.offset(offset=offset).limit(1)).first()
+            assert c is not None
+            return c.object_id
+            
+
+
+
+def resolve_alias(alias: str, purpose: str = "fraud") -> str | None:
+    for k, v in aliases.items():
+        if v.get('alias') == alias:
+            return k
+        
+    # not an alias
+    if alias == ":next":
+        return random_next(purpose=purpose)
+    
     else:
         if (len(alias) < 15 or len(alias) > 17) and not alias.startswith('_test'):
             raise AFNoCompany(f"Invalid alias {alias!r}")
