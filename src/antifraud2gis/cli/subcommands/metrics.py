@@ -40,7 +40,7 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
 @metrics_app.command(name="wipe")
 def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
     """ wipe metrics """
-    object_id = resolve_alias(oid) if oid.lower() != 'all' else None
+    object_id = resolve_alias(oid) if oid.lower() != ':all' else None
     print("wipe metrics...", object_id)
 
     with DBSession() as dbsession:
