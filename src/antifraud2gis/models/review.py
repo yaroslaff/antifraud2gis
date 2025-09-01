@@ -189,7 +189,7 @@ class Review(Base):
             author_age=(self.created - self.author.created).days if self.author else None,                        
             review_age = (datetime.now() - self.created).days
         )
-        if self.provider == "2gis":
+        if self.provider == "2gis" and self.author:
             rdata['author_created'] = self.author.created.strftime("%Y-%m-%d %H:%M:%S")
         else:
             rdata['author_created'] = None
