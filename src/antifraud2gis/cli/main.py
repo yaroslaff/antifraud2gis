@@ -129,13 +129,14 @@ def info(oid: str):
         assert object_id is not None
         try:
             c = Company.get(object_id=object_id, dbsession=dbsession)
+            c = dbsession.merge(c)
             if c is None:
                 print("Not found company locally, loading from network")
                 c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
         except (AFNoCompany, AFNoTitle):
             print(f"Company {oid} not found")
             return
-        print(c.info(dbsession=dbsession))
+        print(c.info())
 
 
 @app.command()

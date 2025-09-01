@@ -68,8 +68,9 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     # print(neighbour_count.sort_values(ascending=False).head(10).to_string())
 
     for oid, hits in neighbour_count.sort_values(ascending=False).head(10).items():
-        _c = Company.get_or_fetch(object_id=oid, dbsession=DBSession(), full=False)
-        print(f"{hits}: {_c}")
+        with DBSession() as dbsession:
+            _c = Company.get_or_fetch(object_id=oid, dbsession=dbsession, full=False)   
+            print(f"{hits}: {_c}")
 
     # metrics['neigh:tophits'] = int(neighbour_count.sort_values(ascending=False).iloc[0])
 

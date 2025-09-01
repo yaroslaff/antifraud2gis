@@ -49,6 +49,7 @@ from ..logger import logger_verbose
 class Company(Base):
 
     __tablename__ = "company"
+    # __allow_unmapped__ = True  # for nreviews
 
     # relations: 'RelationDict'
 
@@ -110,22 +111,12 @@ class Company(Base):
             else:
                 return company
 
-        c = cls.fetch(object_id, dbsession=dbsession, full=full)
+        cls.fetch(object_id, full=full)
+        c = dbsession.get(cls, object_id)
         
         # Try to load from DB AGAIN
         # c = dbsession.get(cls, object_id)
         return c
-
-    @classmethod
-    def get(cls, object_id: str, dbsession: Session = None) -> "Company":
-        # resolve alias
-        # object_id = resolve_alias(object_id)
-
-        if dbsession is None:
-            dbsession = DBSession()
-
-        company = dbsession.get(cls, object_id)
-        return company
 
     @classmethod
     def count(cls, dbsession: Session) -> int | None:
@@ -180,134 +171,134 @@ class Company(Base):
 
         return self.rating_2gis is not None
 
-    def full_load(self, dbsession: Optional[Session] = None):
-        dbsession = dbsession or scoped_db_session()
-
+    def full_load(self) -> bool:
         if self.is_loaded():
-            return
+            return False
         
         print("full_load: not loaded yet, loading", self)
-        Company.fetch(object_id=self.object_id, full=True, dbsession=dbsession)
+        Company.fetch(object_id=self.object_id, full=True)
+        return True
 
     @classmethod
-    def fetch(cls, object_id: str, full=False, dbsession=None) -> "Company":
+    def fetch(cls, object_id: str, full=False) -> None:
 
         from .review import Review
-        dbsession = dbsession or DBSession()
+        # dbsession = dbsession or DBSession()
         # print(f"FETCH {object_id} full: {full} caller: {caller()}")
 
-        cr = CompanyReviewsIterator(object_id=object_id)
+        with DBSession() as dbsession:
 
-        progress_total = None
-        current_review_idx = 1
+            cr = CompanyReviewsIterator(object_id=object_id)
 
-        ext_reviews = list()
+            progress_total = None
+            current_review_idx = 1
 
-        # fetch statistics
-        stats_reviews = 0
-        stats_2gis = 0
-        stats_private = 0
-        stats_public_2gis = 0 
+            ext_reviews = list()
 
-        meta = None
+            # fetch statistics
+            stats_reviews = 0
+            stats_2gis = 0
+            stats_private = 0
+            stats_public_2gis = 0 
 
-        with Progress(
-            SpinnerColumn(),
-            BarColumn(),
-            "[progress.percentage]{task.percentage:>3.0f}%",
-            TimeElapsedColumn(),
-            TimeRemainingColumn(),
-            TextColumn("[green]{task.description}")
-        ) as progress:
-            task = progress.add_task("[cyan]Loading users...", total=None)            
+            meta = None
 
-            for r in cr:
-                if meta is None:
-                    meta = cr.meta
-                    progress_total = meta['total_count']
-                    progress.update(task, total=progress_total)
+            with Progress(
+                SpinnerColumn(),
+                BarColumn(),
+                "[progress.percentage]{task.percentage:>3.0f}%",
+                TimeElapsedColumn(),
+                TimeRemainingColumn(),
+                TextColumn("[green]{task.description}")
+            ) as progress:
+                task = progress.add_task("[cyan]Loading users...", total=None)            
 
-                public_id = r['user']['public_id']
+                for r in cr:
+                    if meta is None:
+                        meta = cr.meta
+                        progress_total = meta['total_count']
+                        progress.update(task, total=progress_total)
+
+                    public_id = r['user']['public_id']
 
 
-                stats_reviews += 1
-                if r['provider'] == '2gis':
-                    stats_2gis += 1
+                    stats_reviews += 1
+                    if r['provider'] == '2gis':
+                        stats_2gis += 1
 
-                current_review_idx += 1 
-                progress.update(task, advance=1, description=f"[white]{object_id} [green]User {r['user']['public_id']}: {r['user']['name']}")
+                    current_review_idx += 1 
+                    progress.update(task, advance=1, description=f"[white]{object_id} [green]User {r['user']['public_id']}: {r['user']['name']}")
 
-                if r['provider'] == '2gis' and public_id is not None and public_id != '':
-                    # public_id '' on https://2gis.ru/novosibirsk/firm/70000001099934045/
+                    if r['provider'] == '2gis' and public_id is not None and public_id != '':
+                        # public_id '' on https://2gis.ru/novosibirsk/firm/70000001099934045/
 
-                    try:
-                        u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
-                    except AFAuthorUnavailable as e:
-                        logger.error(f"Author {public_id} unavailable: {e}")
-                        continue
+                        try:
+                            u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)                            
+                        except AFAuthorUnavailable as e:
+                            logger.error(f"Author {public_id} unavailable: {e}")
+                            continue
 
-                    if u.private:
-                        stats_private += 1
+                        if u.private:
+                            stats_private += 1
+                        else:
+                            stats_public_2gis += 1
+
+                        if not full:
+                            # maybe we can skip here?
+                            company = dbsession.get(cls, object_id)
+                            if company:
+                                print(f"Short-loaded {object_id}")
+                                return company
                     else:
-                        stats_public_2gis += 1
+                        ext_reviews.append(r)
 
-                    if not full:
-                        # maybe we can skip here?
-                        company = dbsession.get(cls, object_id)
-                        if company:
-                            print(f"Short-loaded {object_id}")
-                            return company
-                else:
-                    ext_reviews.append(r)
+            if cr.pages_loaded == 0:
+                cls.check_company_alive(object_id=object_id)
 
-        if cr.pages_loaded == 0:
-            cls.check_company_alive(object_id=object_id)
+            # loaded all pages
+            company = dbsession.get(cls, object_id)
+            if company is None:           
+                raise AFNoCompany(f"Total: {stats_reviews}, pub 2gis profiles: {stats_public_2gis} private profiles: {stats_private}")
 
-        # loaded all pages
-        company = dbsession.get(cls, object_id)
-        if company is None:           
-            raise AFNoCompany(f"Total: {stats_reviews}, pub 2gis profiles: {stats_public_2gis} private profiles: {stats_private}")
+            if ext_reviews:
+                saved_ext_reviews = 0
+                for _r in ext_reviews:
 
-        if ext_reviews:
-            saved_ext_reviews = 0
-            for _r in ext_reviews:
+                    if not Review.exists(_r['id'], dbsession=dbsession):
+                        _review = Review(
+                            id=_r['id'],
+                            author=None,
+                            company=company,
+                            _name = _r['user']['name'],
+                            provider=_r['provider'],
+                            rating=_r['rating'],
+                            created = datetime.fromisoformat(_r['date_created'])
+                        )
+                        dbsession.add(_review)
+                        saved_ext_reviews += 1
 
-                if not Review.exists(_r['id'], dbsession=dbsession):
-                    _review = Review(
-                        id=_r['id'],
-                        author=None,
-                        company=company,
-                        _name = _r['user']['name'],
-                        provider=_r['provider'],
-                        rating=_r['rating'],
-                        created = datetime.fromisoformat(_r['date_created'])
-                    )
-                    dbsession.add(_review)
-                    saved_ext_reviews += 1
+                print(f"Saved {saved_ext_reviews}/{len(ext_reviews)} external review(s)")
 
-            print(f"Saved {saved_ext_reviews}/{len(ext_reviews)} external review(s)")
+                # dbsession.commit()
 
-            # dbsession.commit()
+            # if company.rating_2gis is None:
+            company.count_2gis = cr.meta['total_count']
+            company.branch_count_2gis = cr.meta['branch_reviews_count']
+            company.rating_2gis = cr.meta['branch_rating']
+            company.updated_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
 
-        # if company.rating_2gis is None:
-        company.count_2gis = cr.meta['total_count']
-        company.branch_count_2gis = cr.meta['branch_reviews_count']
-        company.rating_2gis = cr.meta['branch_rating']
-        company.updated_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
-
-        dbsession.add(company)
-        dbsession.commit()
+            dbsession.add(company)
+            dbsession.commit()
 
 
-        logger.info(f"Company {object_id}: loaded from network {company.nreviews()} reviews")
-        # why we were called?
-        # print("----------")
-        # print("".join(traceback.format_stack(limit=10)))         
+            logger.info(f"Company {object_id}: loaded from network {company.nreviews()} reviews")
+            # why we were called?
+            # print("----------")
+            # print("".join(traceback.format_stack(limit=10)))         
 
-        statistics.total_companies_loaded+=1
-        statistics.total_companies_loaded_network+=1
+            statistics.total_companies_loaded+=1
+            statistics.total_companies_loaded_network+=1
 
-        return company
 
     @classmethod
     def check_company_alive(self, object_id: str):
@@ -332,8 +323,8 @@ class Company(Base):
             yield r.author
 
 
-    def info(self, dbsession: Session):
-        return f'{self} updated_at: {self.updated_at} reviews: {self.nreviews(dbsession=dbsession)}'
+    def info(self):
+        return f'{self} updated_at: {self.updated_at} reviews: {self.nreviews()}'
 
     def __repr__(self):
 
@@ -342,18 +333,16 @@ class Company(Base):
            
         tags = " "
 
-        return f'Company({self.object_id} {self.title} ({self.rating_2gis}) addr: {self.city}, {self.address} reviews:{self.nreviews()}{tags})'
+        return f'Company({self.object_id} {self.title} ({self.rating_2gis}) addr: {self.city}, {self.address} {tags})'
 
     def get_title(self):
         return self.title
         # return self.title or self.object_id
 
-    def nreviews(self, provider = None, dbsession = None):
+    def nreviews(self, provider = None):
         from .review import Review
 
-        dbsession = dbsession or DBSession()
-
-        with dbsession:
+        with DBSession() as dbsession:
             if provider is None:
                 return dbsession.query(func.count(Review.id))\
                             .filter(Review.object_id == self.object_id)\

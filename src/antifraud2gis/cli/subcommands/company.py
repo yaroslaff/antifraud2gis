@@ -18,7 +18,8 @@ def сompany_reviews(oid: str,
     object_id = resolve_alias(oid)
     assert object_id is not None
     with DBSession() as dbsession:
-        c = Company.get(object_id=object_id, dbsession=dbsession)
+        c = Company.get(object_id=object_id)
+        c = dbsession.merge(c) # ZZZZZZZZZZZZZZZZZz
         for r in c.reviews:
             if id_only:
                 print(r.id)
@@ -103,7 +104,9 @@ def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", help="Fe
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
         try:
-            c = Company.fetch(object_id=object_id, full=full, dbsession=dbsession)
+            Company.fetch(object_id=object_id, full=full)
+            c = Company.get(object_id=object_id)
+            print("fetched:", c)
         except AFNoCompany as e:
             logger.error(e)
 

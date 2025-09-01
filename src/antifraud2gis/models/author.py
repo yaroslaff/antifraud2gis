@@ -24,7 +24,7 @@ from ..session import http_session
 # from .review import Review
 from ..logger import logger
 from ..base import Base
-from ..db import DBSession, ScopedDBSession
+from ..db import DBSession
 from ..exceptions import AFAuthorPrivate
 from ..net.author_reviews import AuthorReviewsIterator
 
@@ -81,7 +81,7 @@ class Author(Base):
         if user:
             return user
         
-        user = cls.fetch(public_id, dbsession=dbsession)
+        user = cls.fetch(public_id)
 
         return user
 
@@ -92,9 +92,7 @@ class Author(Base):
         return user
 
     @classmethod
-    def fetch_base(cls, public_id: str, dbsession = None) -> 'Author':
-        dbsession = dbsession or scoped_db_session()
-
+    def fetch_base(cls, public_id: str, dbsession) -> 'Author':
         base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
         r = http_session.get(base_url)
         r.raise_for_status()
@@ -114,7 +112,7 @@ class Author(Base):
         return _user
 
     @classmethod
-    def fetch(cls, public_id: str, dbsession = None) -> 'Author':
+    def fetch(cls, public_id: str) -> 'Author':
         from .company import Company
         from .review import Review
 
@@ -131,55 +129,55 @@ class Author(Base):
             
             return city.replace(u'\xa0', u' '), address
 
-        dbsession = dbsession or DBSession()
+        with DBSession() as dbsession:
 
-        _author = None
+            _author = None
 
-        # get base info for user
-        _author = cls.fetch_base(public_id=public_id, dbsession=dbsession)
+            # get base info for user
+            _author = cls.fetch_base(public_id=public_id, dbsession=dbsession)
 
-        if _author.private:
-            # do not fetch reviews if user has private profile
-            return _author
+            if _author.private:
+                # do not fetch reviews if user has private profile
+                return _author
 
-        ar = AuthorReviewsIterator(public_id=public_id)
+            ar = AuthorReviewsIterator(public_id=public_id)
 
-        for review_data in ar:            
-            # save company (if needed)
-            obj = review_data['object']
+            for review_data in ar:            
+                # save company (if needed)
+                obj = review_data['object']
+                
+                if obj['type'] != 'branch':
+                    # we process only companies type=branch
+                    # skip types: attraction adm_div
+                    continue
+
+                _company = dbsession.get(Company, obj['id'])
+                if _company is None:
+                    city, address = split_addr(obj['address'])
+
+                    if True:
+                        # normal company may have no address, e.g. 70000001083275091
+                        _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
+                        _company.update_search_str()
+                        dbsession.add(_company)
+                        dbsession.commit()
+
+                # save review
+                _review = Review(
+                    id=review_data['id'],
+                    author=_author,
+                    _name=None, # name will be takes from _user.name
+                    company=_company,
+                    provider=review_data['provider'],
+                    rating=review_data['rating'],
+                    created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
+                )
+                dbsession.add(_review)
+                dbsession.commit()
             
-            if obj['type'] != 'branch':
-                # we process only companies type=branch
-                # skip types: attraction adm_div
-                continue
-
-            _company = dbsession.get(Company, obj['id'])
-            if _company is None:
-                city, address = split_addr(obj['address'])
-
-                if True:
-                    # normal company may have no address, e.g. 70000001083275091
-                    _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
-                    _company.update_search_str()
-                    dbsession.add(_company)
-                    dbsession.commit()
-
-            # save review
-            _review = Review(
-                id=review_data['id'],
-                author=_author,
-                _name=None, # name will be takes from _user.name
-                company=_company,
-                provider=review_data['provider'],
-                rating=review_data['rating'],
-                created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
-            )
-            dbsession.add(_review)
-            dbsession.commit()
-           
-        statistics.total_users_loaded_network += 1
-        statistics.total_users_loaded += 1
-        return _author
+            statistics.total_users_loaded_network += 1
+            statistics.total_users_loaded += 1
+            return _author
 
 
     def nreviews(self):

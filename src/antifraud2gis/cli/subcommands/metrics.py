@@ -22,7 +22,7 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
     """ show metrics """
 
 
-    object_id = resolve_alias(oid) if oid else None
+    object_id = resolve_alias(oid) if oid.lower() != ':all' else None
 
     with DBSession() as dbsession:
         stmt = dbsession.query(Metric)
@@ -46,9 +46,12 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
     with DBSession() as dbsession:
         if oid.lower() == ':all':
             print("wipe metrics for ALL companies")
+            r = dbsession.query(Metric).delete()            
             for c in dbsession.query(Company).filter(Company.metrics_calculated != None):
-                print("..", c)
-                c.wipe_metrics(dbsession=dbsession)
+                print("wipe metrics_calculated/metrics_signature for", c)
+                c.metrics_calculated = None
+                c.metrics_signature = None
+                # c.wipe_metrics(dbsession=dbsession)
 
             dbsession.commit()
 
@@ -65,17 +68,21 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
 
 
 def metrics_run_code(c: Company):
+
     with DBSession() as dbsession:
         c = dbsession.merge(c)
 
         try:
-            c.full_load(dbsession=dbsession)
+            if c.full_load():
+                # if loaded new reviews, refresh
+                dbsession.refresh(c)
+
         except AFNoCompany as e:
             logger.error(e)
             c.error = str(e)
             dbsession.commit()
             return
-        
+                
         data = c.data_reviews()
 
         logger.debug(f"Load {len(data)} authors...")
@@ -83,6 +90,11 @@ def metrics_run_code(c: Company):
         cdf = pd.DataFrame(data)
 
         adf = pd.DataFrame()
+        
+        if cdf.empty:
+            logger.error(f"Empty reviews for {c.object_id}")
+            return
+
         for author_id in cdf['author_id'].dropna().unique():
             with DBSession() as dbsession2:
                 # print(author_id)
@@ -91,8 +103,12 @@ def metrics_run_code(c: Company):
 
 
         logger.debug("Running metrics...")
-        metrics = run_metrics(c.object_id, cdf, adf)
-        save_metrics(c, metrics=metrics, dbsession=dbsession)
+        try:
+            metrics = run_metrics(c.object_id, cdf, adf)
+            save_metrics(c, metrics=metrics, dbsession=dbsession)
+        except AFNoCompany as e:
+            logger.error(e)
+            return
 
         # total df    
         print_json(data=metrics)
@@ -137,7 +153,12 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
 
         assert(object_id is not None)
         with DBSession() as dbsession:
-            c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+            try:
+                c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=True)
+            except AFNoCompany as e:
+                logger.error(e)
+                return
 
         metrics_run_code(c)
+
 

@@ -19,14 +19,13 @@ from ..fraud import detect
 
 from ..db import DBSession
 from ..settings import settings
-from ..models.author import Author
-from ..models.review import Review
-from ..models.company import Company
+from ..models import Author, Review, Company, Metric
 
 
 def printsummary():
-    dbsession = DBSession()
+    with DBSession() as dbsession:
+        print("Nusers:", Author.nusers(dbsession=dbsession))
+        print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count():,} metrics: {dbsession.query(Company).filter(Company.metrics_calculated).count():,}")
+        print(f"Reviews: {dbsession.query(Review).count()}")
+        print(f"Metrics: {dbsession.query(Metric).count()}")
 
-    print("Nusers:", Author.nusers(dbsession=dbsession))
-    print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count()}")
-    print(f"Reviews: {dbsession.query(Review).count()}")
