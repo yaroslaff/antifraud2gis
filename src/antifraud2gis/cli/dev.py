@@ -116,6 +116,8 @@ app.add_typer(company_app, name="company")
 def app_callback(verbose: bool = verbose_option):
     """ Antifraud for 2GIS (dev tool) """    
     loginit(verbose)
+    sys.stdout.reconfigure(line_buffering=True)
+
 
 
 @app.command(name="shell")
