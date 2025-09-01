@@ -82,6 +82,8 @@ class Author(Base):
             return user
         
         user = cls.fetch(public_id)
+        if user:
+            user = dbsession.merge(user)
 
         return user
 

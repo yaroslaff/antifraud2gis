@@ -238,6 +238,8 @@ class Company(Base):
                             logger.error(f"Author {public_id} unavailable: {e}")
                             continue
 
+                        # u = dbsession.merge(u)
+
                         if u.private:
                             stats_private += 1
                         else:

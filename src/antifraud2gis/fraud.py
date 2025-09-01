@@ -63,7 +63,9 @@ def detect(c: Company, dbsession: Session, explain: bool = False, force=False):
         print(c.error)
         return
 
-    c.full_load(dbsession=dbsession)
+    c.full_load()
+
+    c = dbsession.merge(c)
 
     """ skip too small targets """
     if c.nreviews() <= settings.min_reviews:
