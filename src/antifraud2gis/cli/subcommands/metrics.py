@@ -123,7 +123,7 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
 
         started = time.time()
         part_started = time.time()
-        part_size = 10
+        part_size = 100
 
         with DBSession() as dbsession:
 
