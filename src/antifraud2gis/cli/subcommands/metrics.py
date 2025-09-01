@@ -122,6 +122,8 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
     if oid == ":all":
 
         started = time.time()
+        part_started = time.time()
+        part_size = 10
 
         with DBSession() as dbsession:
 
@@ -142,6 +144,9 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
             )), start=1):
                 print(f"{idx}/{total} uptime: {int(time.time() - started)}s {c}")
                 metrics_run_code(c)
+                if idx % part_size == 0:
+                    print(f"PART ({part_size}) finished in {int(time.time() - part_started)}s RATE: {(int(time.time() - part_started))/part_size:.1f} seconds per company")
+                    part_started = time.time()
 
 
     else:

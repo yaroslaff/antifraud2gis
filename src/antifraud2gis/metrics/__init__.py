@@ -39,8 +39,13 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
 
     metrics = dict()
 
+    # basic convertation first
+    cdf["author_created"] = pd.to_datetime(cdf["author_created"])
+    cdf["created"] = pd.to_datetime(cdf["created"])
+
     metrics["reviews:company"] = len(cdf)
     metrics["reviews:audience"] = len(adf)
+
     cdf2gis = cdf.loc[cdf["provider"] == "2gis"].copy()
     metrics["reviews:2gis"] = len(cdf2gis)
 
@@ -50,16 +55,13 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
 
 
 
-    cdf["author_created"] = pd.to_datetime(cdf["author_created"])
-    cdf["created"] = pd.to_datetime(cdf["created"])
-    cdf["age"] = (cdf["created"] - cdf["author_created"]).dt.days
 
+    cdf2gis["age"] = (cdf2gis["created"] - cdf2gis["author_created"]).dt.days
 
     metrics["external_total"] = int(len(cdf) - len(cdf2gis))
     metrics["external_ratio"] = int(100 * (len(cdf) - len(cdf2gis)) / len(cdf))
-
-    
-    
+   
+       
     rev_count = adf.groupby("author_id").size()
     neighbour_count = adf.groupby("object_id").size()
     neighbour_count = neighbour_count.drop(object_id, errors="ignore")
