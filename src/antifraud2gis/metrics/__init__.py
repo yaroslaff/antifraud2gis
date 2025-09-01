@@ -28,44 +28,46 @@ def save_metrics(c: Company, metrics: dict, dbsession: Session):
 
 
 
+def intnone(x: float | None) -> int | None:
+    if x is None or pd.isna(x):
+        return None
+    return int(x)
+
+
 
 def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[str, float]:
 
     metrics = dict()
 
-    metrics["reviews:total"] = len(cdf)
+    metrics["reviews:company"] = len(cdf)
+    metrics["reviews:audience"] = len(adf)
+    cdf2gis = cdf.loc[cdf["provider"] == "2gis"].copy()
+    metrics["reviews:2gis"] = len(cdf2gis)
+
+    if cdf.empty or adf.empty or cdf2gis.empty:
+        metrics["is_empty"] = 1
+        return metrics
+
+
 
     cdf["author_created"] = pd.to_datetime(cdf["author_created"])
     cdf["created"] = pd.to_datetime(cdf["created"])
     cdf["age"] = (cdf["created"] - cdf["author_created"]).dt.days
 
-    cdf2gis = cdf.loc[cdf["provider"] == "2gis"].copy()
-    metrics["reviews:2gis"] = len(cdf2gis)
 
     metrics["external_total"] = int(len(cdf) - len(cdf2gis))
     metrics["external_ratio"] = int(100 * (len(cdf) - len(cdf2gis)) / len(cdf))
 
-
-    metrics['mean_age'] = int(cdf2gis.loc[:, "age"].mean())
-    metrics['median_age'] = int(cdf2gis.loc[:, "age"].median())
     
     
     rev_count = adf.groupby("author_id").size()
-
     neighbour_count = adf.groupby("object_id").size()
-
     neighbour_count = neighbour_count.drop(object_id, errors="ignore")
-
     metrics['neigh:total'] = len(neighbour_count)
     metrics['neigh:ratio'] = round(len(neighbour_count) / metrics['reviews:2gis'], 2)
 
 
     neighbour_count = neighbour_count[neighbour_count >= 2]
-
-
-
-    # print("NEIGH count (top)")
-    # print(neighbour_count.sort_values(ascending=False).head(10).to_string())
 
     for oid, hits in neighbour_count.sort_values(ascending=False).head(10).items():
         with DBSession() as dbsession:
@@ -100,11 +102,12 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
         metrics['tn:nbr:ratio'] = round(100 * tn_nbr.median() / len(tn_nbr),2)
 
     else:
-        metrics['neigh:top:hits'] = 0
-        metrics['neigh:top:hits_ratio'] = 0
-        metrics['tn:nbr:mean'] = 0
-        metrics['tn:nbr:median'] = 0
-        metrics['tn:nbr:ratio'] = 0
+        pass
+        #metrics['neigh:top:hits'] = 0
+        #metrics['neigh:top:hits_ratio'] = 0
+        #metrics['tn:nbr:mean'] = 0
+        #metrics['tn:nbr:median'] = 0
+        #metrics['tn:nbr:ratio'] = 0
 
 
     # a_nr of review: how many reviews from this authour in dataset
@@ -145,27 +148,29 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
     # Zodiac metric
     # For cdf dataframe, make Series of 12 elements based on month of all records author_created
     # I want to know how many authors are born each month
-    zodiac = cdf2gis["author_created"].dt.month.value_counts().sort_index().reindex(range(1, 13), fill_value=0)
-    
-    metrics['zodiac:max'] = int(zodiac.max())
-    metrics['zodiac:std'] = round(zodiac.std(), 2)
-    metrics['zodiac:cv'] = round(zodiac.std() / zodiac.mean(), 2)
+    if not cdf2gis.empty:
 
-    cdf2gis['author_created_ym'] = cdf2gis['author_created'].dt.strftime('%Y%m')
-    
-    ym = cdf2gis.groupby('author_created_ym')['author_id'].nunique().sort_values()
-
-    metrics['zodiacym:max'] = int(ym.max())
-
-    metrics['zodiacym:std'] = round(ym.std(), 2) 
-    metrics['zodiacym:cv'] = round(ym.std() / ym.mean(), 2)
-
-    metrics['zodiacym:len'] = len(ym)
-    metrics['zodiacym:ratio'] = round(len(ym)/len(cdf2gis), 2)
+        metrics['mean_age'] = intnone(cdf2gis.loc[:, "age"].mean()) 
+        metrics['median_age'] = intnone(cdf2gis.loc[:, "age"].median())
 
 
 
+        zodiac = cdf2gis["author_created"].dt.month.value_counts().sort_index().reindex(range(1, 13), fill_value=0)
+        
+        metrics['zodiac:max'] = int(zodiac.max())
+        metrics['zodiac:std'] = round(zodiac.std(), 2)
+        metrics['zodiac:cv'] = round(zodiac.std() / zodiac.mean(), 2)
 
+        cdf2gis['author_created_ym'] = cdf2gis['author_created'].dt.strftime('%Y%m')
+        
+        ym = cdf2gis.groupby('author_created_ym')['author_id'].nunique().sort_values()
 
+        metrics['zodiacym:max'] = int(ym.max())
+
+        metrics['zodiacym:std'] = round(ym.std(), 2) 
+        metrics['zodiacym:cv'] = round(ym.std() / ym.mean(), 2)
+
+        metrics['zodiacym:len'] = len(ym)
+        metrics['zodiacym:ratio'] = round(len(ym)/len(cdf2gis), 2)
 
     return metrics
