@@ -93,6 +93,8 @@ def metrics_run_code(c: Company):
         
         if cdf.empty:
             logger.error(f"Empty reviews for {c.object_id}")
+            metrics = {"is_empty": 1}
+            save_metrics(c, metrics=metrics, dbsession=dbsession)
             return
 
         for author_id in cdf['author_id'].dropna().unique():
