@@ -142,6 +142,11 @@ def metrics_run(oid: str = typer.Argument(..., help="2GIS object_id")):
                     Company.updated_at.isnot(None),
                     Company.error.is_(None)
             )), start=1):
+                
+                if c.object_id.startswith("_test"):
+                    print("SKIP test company", c)
+                    continue
+
                 print(f"{idx}/{total} uptime: {int(time.time() - started)}s {c}")
                 metrics_run_code(c)
                 if idx % part_size == 0:
