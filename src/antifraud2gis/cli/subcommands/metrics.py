@@ -37,6 +37,14 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
 
 
 
+def countdown(n=10):
+    print(f"Countown {n} seconds... (Ctrl+C to cancel)")
+    for i in range(1, 10):
+        print(i, end=' ', flush=True)
+        time.sleep(1)
+    print()
+
+
 @metrics_app.command(name="wipe")
 def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
     """ wipe metrics """
@@ -46,6 +54,8 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
     with DBSession() as dbsession:
         if oid.lower() == ':all':
             print("wipe metrics for ALL companies")
+            countdown()
+
             r = dbsession.query(Metric).delete()            
             for c in dbsession.query(Company).filter(Company.metrics_calculated != None):
                 print("wipe metrics_calculated/metrics_signature for", c)
