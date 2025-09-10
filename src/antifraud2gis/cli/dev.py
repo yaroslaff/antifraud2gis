@@ -242,7 +242,16 @@ def submit(
     with DBSession() as dbsession:
         # create record in db if needed (to ensure company exists)
         # this is SHORT request
-        _c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
+        try:
+            _c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
+        except AFNoCompany as e:
+            print(f"Company {object_id} not found")
+            _c = Company.get(object_id=object_id, dbsession=dbsession)
+            if _c is None:
+                return
+            _c.error = str(e)
+            dbsession.commit()
+            return
 
     submit_fraud_task(object_id, force=force)
     print(f"Submitted task for {_c} (force: {force})")
