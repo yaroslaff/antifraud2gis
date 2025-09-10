@@ -185,8 +185,12 @@ def fraud(oid: str,
 
         try:
             c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession)
-        except (AFNoCompany, AFNoTitle, AFCompanyError):
-            print("No such company (geo or no 2gis reviews)")
+        except (AFNoCompany, AFNoTitle, AFCompanyError) as e:
+            print("No such company (geo or no 2gis reviews)")            
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            c.error = str(e)
+            print("set error:", c.error)
+            dbsession.commit()            
             return
 
         # if args.show:

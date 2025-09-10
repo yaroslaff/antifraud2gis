@@ -59,7 +59,10 @@ def fraud_task(oid: str, force=False):
         try:
             c = Company.get_or_fetch(oid, full=True, dbsession=dbsession)
         except (AFNoCompany, AFCompanyNotFound) as e:
-            logger.warning(f"Worker: Company {oid!r} not found or broken")
+            logger.warning(f"Worker: Company {oid!r} not found or broken ({type(e)}: {e})")
+            c = Company.get(oid, dbsession=dbsession)
+            c.error = str(e)
+            dbsession.commit()
             return
                
         if c.error:
