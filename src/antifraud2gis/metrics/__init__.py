@@ -37,6 +37,18 @@ def intnone(x: float | None) -> int | None:
 def make_df(cdf, adf: pd.DataFrame) -> tuple:
 
 
+    """
+    Prepare dataframes
+    cdf2gis - new dataset, reviews to company only from 2gis provider
+    
+
+    Fields:
+    author_created and created - converted to datetime
+    age - age of author (days passed since author account created)
+    a_nr - how many reviews from this author in dataset (just author reviews)
+    o_nr - how many reviews to this company in dataset (neighbours)    
+    """
+
     # basic convertation first
     cdf["author_created"] = pd.to_datetime(cdf["author_created"])
     cdf["created"] = pd.to_datetime(cdf["created"])
@@ -55,6 +67,19 @@ def make_df(cdf, adf: pd.DataFrame) -> tuple:
 
 
 def run_basic_metrics(cdf, adf, cdf2gis) -> dict:
+    """
+    Basic statistics
+
+    reviews:company - number of reviews to this (metric's target) company
+    reviews:audience - size of adf, all reviews of auditory
+    reviews:2gis - only 2gis reviews to target company
+
+    is_empty - 1 if at least one of dataframes is empty
+
+    external_total - number of external reviews (not 2gis) to company
+    external_ratio - %% of external reviews to total
+
+    """
     metrics = dict()
     metrics["reviews:company"] = len(cdf)
     metrics["reviews:audience"] = len(adf)
@@ -71,6 +96,15 @@ def run_basic_metrics(cdf, adf, cdf2gis) -> dict:
     return metrics
 
 def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> dict:
+
+
+    """
+    Neighbour statistics
+
+    neigh:total - number of neighbours (target not counted)
+    neigh:ratio - ratio of neigh:total/reviews2gis
+    """
+
 
     metrics = dict()
 
@@ -129,6 +163,12 @@ def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> di
     return metrics
 
 def run_author_metrics(adf: pd.DataFrame) -> dict:
+    """
+    Author metrics
+    r1:mean/median - ratio of unique reviews (only one author) to total
+    rpa:mean/median - Reviews per author
+    """
+
     metrics = dict()
     # R1: ratio of unique reviews (no neighbours) to total reviews
     # not sure if it works
