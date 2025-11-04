@@ -374,7 +374,7 @@ class Company(Base):
     def __repr__(self):
 
         if self.error:
-            return f'Company({self.object_id} {self.title!r} ERR: {self.error!r})'
+            return f'Company({self.object_id} {self.title!r} r{self.region_id} ERR: {self.error!r})'
            
         tags = " "
 

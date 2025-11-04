@@ -85,7 +85,7 @@ def fix_region_id(
     started = time.time()
 
     with DBSession() as dbsession:
-        stmt = select(Company).where(Company.region_id == -1).limit(1)
+        stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
         company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
 
@@ -105,7 +105,7 @@ def fix_region_id(
         ar = AuthorReviewsIterator(public_id=public_id)
         for ard in ar:
             region_id = ard['region_id']
-            print(f"obj: {ard['object']['id']}")
+            print(f"Obj: {ard['object']['id']}")
             try:
                 c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
             except AFNoCompany:
@@ -116,7 +116,10 @@ def fix_region_id(
                 print(f"No company: {ard['object']['id']}")
                 continue
 
-            print(f"Set r{region_id} to {c}")
+            if c.error:
+                print("Skip error company")
+
+            print(f"  Set r{region_id} to {c}")
             c.region_id = region_id
         print("Commit...")
         dbsession.commit()
