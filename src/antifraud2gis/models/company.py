@@ -390,7 +390,7 @@ class Company(Base):
         with DBSession() as dbsession:
             if provider is None:
                 return dbsession.query(func.count(Review.id))\
-                            .filter(Review.object_id == self.object_id)\
+                            .filter(Review.object_id == self.object_id, Review.deleted == False)\
                             .scalar() or 0
 
     def data_reviews(self, provider = None, dbsession = None, days = None):

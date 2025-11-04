@@ -152,6 +152,15 @@ def fix_region_id(
             )
         public_id = dbsession.scalar(stmt)
 
+        if public_id is None:
+            if company.nreviews() == 0:
+                print("Company has no reviews, ok...")
+                company.region_id = -2
+                dbsession.commit()
+                return
+        else:
+            raise NotImplementedError
+
         try:
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
             print(f"Processed reviews: {' '.join(review_ids)}")
