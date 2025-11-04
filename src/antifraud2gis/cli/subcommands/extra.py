@@ -100,7 +100,7 @@ def fix_region_id(
         )
         public_id = dbsession.scalar(stmt)
 
-        print("Use author {public_id}")
+        print(f"Use author {public_id}")
 
         ar = AuthorReviewsIterator(public_id=public_id)
         for ard in ar:
