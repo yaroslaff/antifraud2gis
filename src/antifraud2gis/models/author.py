@@ -25,7 +25,7 @@ from ..session import http_session
 from ..logger import logger
 from ..base import Base
 from ..db import DBSession
-from ..exceptions import AFAuthorPrivate
+from ..exceptions import AFAuthorPrivate, AFAuthorUnavailable
 from ..net.author_reviews import AuthorReviewsIterator
 
 
@@ -63,9 +63,11 @@ class Author(Base):
     
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="author",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
+        order_by="Review.created.desc()"
         )
 
+    # metrics: Mapped[list["AuthorMetric"]] = relationship(back_populates="author", cascade="all, delete-orphan")
 
 
     @reconstructor
@@ -109,12 +111,13 @@ class Author(Base):
             private=private,
             created = datetime.fromtimestamp(int(data['public_user']['created_at']), tz=timezone.utc),
             updated = datetime.now(tz=timezone.utc).replace(microsecond=0))
-        dbsession.add(_user)
+        dbsession.add(_user)        
         dbsession.commit()
         return _user
 
-    @classmethod
-    def fetch(cls, public_id: str) -> 'Author':
+    def update_reviews(self, dbsession: Session):
+        """ fetch reviews from network and update self.reviews | NO COMMIT INSIDE"""
+
         from .company import Company
         from .review import Review
 
@@ -131,6 +134,57 @@ class Author(Base):
             
             return city.replace(u'\xa0', u' '), address
 
+        # fetch reviews from network and update self.reviews
+        ar = AuthorReviewsIterator(public_id=self.public_id)
+
+        for review_data in ar:            
+            # save company (if needed)
+            obj = review_data['object']
+            
+            if obj['type'] != 'branch':
+                # we process only companies type=branch
+                # skip types: attraction adm_div
+                continue
+
+            _company = dbsession.get(Company, obj['id'])
+            if _company is None:
+                city, address = split_addr(obj['address'])
+
+                if True:
+                    # normal company may have no address, e.g. 70000001083275091
+                    _company = Company(object_id=obj['id'], region_id=review_data['region_id'], title=obj['name'], city=city, address=address)
+                    _company.update_search_str()
+                    dbsession.add(_company)
+                    dbsession.commit()
+
+            # check if review already exists
+            _review = dbsession.get(Review, review_data['id'])
+            if _review is not None:
+                continue
+
+            if not Review.exists_in_db(review_data['id'], dbsession):
+                # save review
+                _review = Review(
+                    id=review_data['id'],
+                    author=self,
+                    _name=None, # name will be takes from _user.name
+                    company=_company,
+                    provider=review_data['provider'],
+                    rating=review_data['rating'],
+                    created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
+                )
+                dbsession.add(_review)
+            else:
+                print("Review already in DB:", review_data['id'])
+    
+
+            # dbsession.commit()
+
+
+
+    @classmethod
+    def fetch(cls, public_id: str) -> 'Author':
+
         with DBSession() as dbsession:
 
             _author = None
@@ -140,42 +194,16 @@ class Author(Base):
 
             if _author.private:
                 # do not fetch reviews if user has private profile
+                print(f"Private profile {_author.public_id}, no reviews fetched")
                 return _author
-
-            ar = AuthorReviewsIterator(public_id=public_id)
-
-            for review_data in ar:            
-                # save company (if needed)
-                obj = review_data['object']
-                
-                if obj['type'] != 'branch':
-                    # we process only companies type=branch
-                    # skip types: attraction adm_div
-                    continue
-
-                _company = dbsession.get(Company, obj['id'])
-                if _company is None:
-                    city, address = split_addr(obj['address'])
-
-                    if True:
-                        # normal company may have no address, e.g. 70000001083275091
-                        _company = Company(object_id=obj['id'], title=obj['name'], city=city, address=address)
-                        _company.update_search_str()
-                        dbsession.add(_company)
-                        dbsession.commit()
-
-                # save review
-                _review = Review(
-                    id=review_data['id'],
-                    author=_author,
-                    _name=None, # name will be takes from _user.name
-                    company=_company,
-                    provider=review_data['provider'],
-                    rating=review_data['rating'],
-                    created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
-                )
-                dbsession.add(_review)
-                dbsession.commit()
+            
+            try:
+                _author.update_reviews(dbsession=dbsession)
+            except requests.HTTPError as e:
+                print(f"HTTP error fetching author {public_id}: {e}")
+                raise AFAuthorUnavailable(f"HTTP error fetching author {public_id}: {e}")
+            
+            dbsession.commit()
             
             statistics.total_users_loaded_network += 1
             statistics.total_users_loaded += 1
@@ -243,7 +271,7 @@ class Author(Base):
                     return r._data['object']
 
 
-    def get_reviews(self):
+    def UNUSED_get_reviews(self):
         self.load()
         from .review import Review
         # reviews are sorted by date_edited desc, not by date_created, we need to re-sort
@@ -265,6 +293,31 @@ class Author(Base):
     @classmethod
     def nusers(cls, dbsession: Session) -> int:
         return dbsession.execute(select(func.count()).select_from(cls)).scalar_one()
+
+
+    def run_metrics(self) -> dict[str, float]:
+        from .authormetric import AuthorMetric
+        
+        # for all reviews from this author, count number of reviews per each company.city
+        city_counts = dict()
+        total = 0
+        # run for ALL reviews. maybe we should limit by days?
+        for r in self.reviews:            
+            if r.company.city not in city_counts:
+                city_counts[r.company.city] = 0
+            city_counts[r.company.city] += 1
+            total += 1
+        
+        # calculate ratio of reviews in top city
+        if total == 0:
+            top_city_ratio = 0.0
+        else:
+            top_city_ratio = round(100 * max(city_counts.values()) / total)
+
+        metrics = dict(
+            top_city_ratio = top_city_ratio
+        )
+        return metrics
 
 
     def __repr__(self):

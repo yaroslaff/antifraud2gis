@@ -43,7 +43,7 @@ from ..db import DBSession, ScopedDBSession, check_or_create_db
 
 
 # CLI
-from .summary import printsummary
+from .status import printstatus
 
 # from .summary import add_summary_parser, handle_summary, printsummary
 #from .company import add_company_parser, handle_company
@@ -69,7 +69,7 @@ def argalias():
     aa.alias(["f", "fr"], "fraud")
     aa.alias(["sf","sfr"], "submitfraud")
     aa.alias("cmp", "compare")
-    aa.alias(["s", "sum"], "summary")
+    aa.alias(["s", "stat"], "status")
     
     aa.skip_flags()
     aa.parse()
@@ -79,7 +79,7 @@ def get_args():
 
 
     parser = argparse.ArgumentParser()
-    parser.add_argument("cmd", choices=['info', 'list','stop','summary', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases'])
+    parser.add_argument("cmd", choices=['info', 'list','stop','status', 'fraud', 'compare', 'submitfraud', 'delreport', 'wipe', 'export', 'search', 'aliases'])
     parser.add_argument("-v", "--verbose", default=False, action='store_true')
     parser.add_argument("--sleep", type=float, default=None, help='sleep N.M seconds after each processed company')
     parser.add_argument("--fmt", "-f", default="normal", choices=['brief', 'normal', 'full'])
@@ -108,9 +108,9 @@ def any_filter(args):
 
 
 @app.command()
-def summary():
-    """ database summary """
-    printsummary()
+def status():
+    """ status: database summary """
+    printstatus()
 
 @app.command(name="aliases")
 def cmd_aliases():
@@ -129,13 +129,13 @@ def info(oid: str):
         assert object_id is not None
         try:
             c = Company.get(object_id=object_id, dbsession=dbsession)
-            c = dbsession.merge(c)
             if c is None:
                 print("Not found company locally, loading from network")
                 c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
         except (AFNoCompany, AFNoTitle):
             print(f"Company {oid} not found")
             return
+        c = dbsession.merge(c)
         print(c.info())
 
 
@@ -143,7 +143,7 @@ def info(oid: str):
 def search(
     query: str,    
     brief: bool = typer.Option(False, "--brief", "-b", help="Show only object_id"),
-    summary: bool = typer.Option(False, "--sum", help="Show summary"),
+    summary: bool = typer.Option(False, "--sum", help="Show summary"),    
 ):
     """
     Search companies by title (partial match), optionally filter by city.
@@ -231,8 +231,8 @@ def main():
         stopfile.touch()
         print(f"Stopfile {stopfile} created")
 
-    elif args.cmd == "summary":
-        printsummary()
+    elif args.cmd == "status":
+        printstatus()
 
     elif args.cmd == "aliases":
         for oid, alias_rec in aliases.items():

@@ -1,7 +1,10 @@
 import typer
 from rich import print_json
+from rich.table import Table
+from rich.console import Console
 import dateutil
 import pandas as pd
+import sys
 
 from ...models import Company, Author
 from ...db import DBSession
@@ -14,17 +17,49 @@ company_app = typer.Typer(help="Company commands")
 
 @company_app.command(name="reviews")
 def сompany_reviews(oid: str,
-        id_only: bool = typer.Option(False, "--id", "-i", help="Only this review")):
+        id_only: bool = typer.Option(False, "--id", "-i", help="Only this review"),
+        table: bool = typer.Option(False, "-t", "--table", help="Show as table")):
     object_id = resolve_alias(oid)
     assert object_id is not None
     with DBSession() as dbsession:
-        c = Company.get(object_id=object_id)
-        c = dbsession.merge(c) # ZZZZZZZZZZZZZZZZZz
+        c = Company.get(object_id=object_id, dbsession=dbsession)
+
+        if table:
+            console = Console()
+
+            # summary
+            rev_table = Table(show_header=False, title=f"{c.object_id} {c.title} ({c.address})")
+            rev_table.add_column("Created", style="bold cyan")
+            rev_table.add_column("Provider", style="bold white")
+            rev_table.add_column("AuthorID", style="bold white")
+            rev_table.add_column("Pvt", style="bold white")
+            rev_table.add_column("Author", style="bold white")
+            rev_table.add_column("Rating", style="bold white")
+
+
         for r in c.reviews:
             if id_only:
                 print(r.id)
+                continue
+
+            if table:
+                rev_table.add_row(r.created.strftime("%Y-%m-%d"),
+                                    r.provider,r.author_id,
+                                    "P" if r.author and r.author.private else " ",
+                                    r.author.name if r.author else r._name or "",
+                                    str(r.rating))
+
             else:
-                print(r)
+                # not table
+                if r.provider == "2gis":
+                    pvt_tag = "P" if r.author.private else " "
+                    print(r.created, r.provider, r.author_id, pvt_tag, r.author.name, r.rating)
+                else:
+                    pvt_tag = "?"
+                    print(r.created, r.provider, r._name, r.rating)
+
+        if table:
+            console.print(rev_table)
 
 # crd
 @company_app.command(name="reviews-data")
@@ -36,9 +71,6 @@ def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id"))
 
     print_json(data=data)
     cdf = pd.DataFrame(data)
-    print(cdf)
-    print("LEN:", len(cdf))
-
 
     df = pd.DataFrame()
     for author_id in cdf['author_id'].dropna().unique():
@@ -103,9 +135,19 @@ def сompany_authors(oid: str):
 def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", help="Fetch full company data")):
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
+
+        c = Company.get(object_id=object_id, dbsession=dbsession)
+        if(c):
+            print("Refresh data for existing company:", c)
+            c.update_reviews(dbsession=dbsession, full=full)
+            dbsession.commit()
+            return
+
+        # missing company
+
         try:
             Company.fetch(object_id=object_id, full=full)
-            c = Company.get(object_id=object_id)
+            c = Company.get(object_id=object_id, dbsession=dbsession)
             print("fetched:", c)
         except AFNoCompany as e:
             logger.error(e)
@@ -116,6 +158,9 @@ def сompany_wipe(oid: str, full: bool = typer.Option(False, "--full", help="Wip
     with DBSession() as dbsession:
         try:
             c = Company.get(object_id=object_id, dbsession=dbsession)
+            if c is None:
+                print("no such company:", object_id, file=sys.stderr)
+                return
             print("WIPE", c)
             dbsession.delete(c)
         except AFNoCompany as e:

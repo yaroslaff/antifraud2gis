@@ -8,6 +8,10 @@ import random
 from rich import print_json
 from rich.text import Text
 from rich.progress import Progress
+from rich.console import Console
+from rich.panel import Panel
+from rich.syntax import Syntax
+
 from pathlib import Path
 from argalias import ArgAlias
 import os
@@ -30,13 +34,14 @@ from ..models.company import Company
 from ..models.author import Author
 from ..models.metric import Metric
 from ..models.metricperc import MetricPerc
-# , reset_user_pool
 from ..models.review import Review
+from ..models.authormetric import AuthorMetric
+
 from ..settings import settings
 from ..fraud import detect, dump_report
 from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError
 from ..aliases import resolve_alias
-from .summary import printsummary
+from .status import printstatus
 from ..tasks import submit_fraud_task, cooldown_queue
 from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_LIST, REDIS_WORKER_STATUS, REDIS_WORKER_STATUS_SET, \
                         REDIS_DRAMATIQ_QUEUE, REVIEWS_KEY, \
@@ -51,6 +56,9 @@ from ..testdata import create_test_records, wipe_test_records
 from .subcommands.metrics import metrics_app
 from .subcommands.author import author_app
 from .subcommands.company import company_app
+from .subcommands.percentiles import percentiles_app
+from .subcommands.reports import reports_app
+from .subcommands.extra import extra_app
 
 import pandas as pd
 
@@ -89,13 +97,36 @@ def arg_aliases():
     aa.alias("af", ["author", "fetch"])
     aa.alias("ar", ["author", "reviews"])
     aa.alias("arn", ["author", "reviews-net"])
+    aa.alias("ard", ["author", "reviews-data"])
     aa.alias("arw", ["author", "reviews-wipe"])
     aa.alias("af", ["author", "fetch"])
+    aa.alias("aw", ["author", "wipe"])
 
+
+    aa.alias("m", "metrics")
     aa.alias(["ml", "mls"], ["metrics", "list"])
     aa.alias("mw", ["metrics", "wipe"])
     aa.alias("mr", ["metrics", "run"])
+    aa.alias("mt", ["metrics", "top"])
+    
+    aa.alias("mar", ["metrics", "arun"])
+    aa.alias("maw", ["metrics", "awipe"])
+    aa.alias(["mal", "mals"], ["metrics", "alist"])
 
+
+
+    aa.alias("p", "percentiles")
+    aa.alias("pl", ["percentiles", "list"])
+    aa.alias("pr", ["percentiles", "run"])
+    aa.alias("pw", ["percentiles", "wipe"])
+
+    aa.alias("r", "reports")
+    aa.alias("rc", ["reports", "city"])
+    aa.alias("rml", ["reports", "metriclist"])
+    aa.alias("rf", ["reports", "fraud"])
+
+    aa.alias("x", "extra")
+    aa.alias("xta", ["extra", "top-author"])
 
     aa.skip_flags()
     aa.parse()
@@ -111,6 +142,9 @@ verbose_option = typer.Option(False, "--verbose", "-v", help="Enable verbose out
 app.add_typer(metrics_app, name="metrics")
 app.add_typer(author_app, name="author")
 app.add_typer(company_app, name="company")
+app.add_typer(percentiles_app, name="percentiles")
+app.add_typer(reports_app, name="reports")
+app.add_typer(extra_app, name="extra")
 
 @app.callback()
 def app_callback(verbose: bool = verbose_option):
@@ -123,12 +157,51 @@ def app_callback(verbose: bool = verbose_option):
 @app.command(name="shell")
 # @click.pass_context
 def cmd_shell():
+
+    from sqlalchemy import select, func, text
+    from traitlets.config import Config
+
+    cheatsheet = """\
+users = dbsession.scalars(select(Author).order_by(Author.public_id).limit(6)).all()
+    
+for user in dbsession.scalars(select(Author).order_by(Author.public_id).limit(6)): print(user)
+
+res = dbsession.execute(select(Author, Review).join(Author.reviews).where(Author.public_id=='afa4a64202d84389965bb0ee6101844d'))
+for author, review in res: print(author, review)
+
+dbsession.scalar(select(func.count()).select_from(Review).where(Review.author_id=='cba00db5672a47b3b1aaca15e9310f75'))    
+"""
+
+    cfg = Config()
+    cfg.TerminalInteractiveShell.simple_prompt = False  # enable full prompt_toolkit features
+    # cfg.TerminalInteractiveShell.editing_mode = 'vi'     # 'vi' or 'emacs'
+    cfg.TerminalInteractiveShell.autoindent = True
+    cfg.TerminalInteractiveShell.confirm_exit = False
+
+
     ns = {
+
+        "select": select,
+        "func": func,
+        "text": text,
+
         # "m": __import__("mymodule"),
         "Company": Company,
-        "resolve_alias": resolve_alias
+        "Author": Author,
+        "Review": Review,
+        "Metric": Metric,
+        "MetricPerc": MetricPerc,                
+        "resolve_alias": resolve_alias,        
     }
-    start_ipython(argv=[], user_ns=ns)
+
+
+    console = Console()
+    syntax = Syntax(cheatsheet, "python", theme="monokai", line_numbers=False)
+    console.print(Panel(syntax, title="[bold cyan]SQLAlchemy cheatsheet[/]", border_style="cyan"))
+
+    with DBSession() as dbsession:
+        ns['dbsession'] = dbsession
+        start_ipython(argv=[], user_ns=ns, config=cfg)
 
 
 
@@ -318,6 +391,97 @@ def queue(action: str = typer.Argument("show", help="Action: show (default) or r
         print(f"  {c['oid']} {c['title']} ({c['rating']}) {c['score'].get('detections')}")
 
 
+
+
+
+@app.command()
+def recreate(table: str = typer.Argument(None, help="Table (class) to recreate")):
+    """ re-create table in database (drops data!)"""
+    if table is None:
+        print("Specify table to recreate (Metric, MetricPerc, Author, Review, Company)")
+        return
+    # get cls based on table
+    cls = globals().get(table, None)
+    if cls is None:
+        print("No such table/class")
+        return
+    print("Re-create table:", table, cls)
+    countdown(5)
+    with DBSession() as dbsession:
+        print("Drop...")
+        cls.__table__.drop(dbsession.bind, checkfirst=True)
+        print("Create...")
+        cls.__table__.create(dbsession.bind, checkfirst=True)
+        print("Done.")
+    
+
+@app.command(name="cust")
+# @click.pass_context
+def cmd_cust(
+    object_id: str = typer.Argument(..., help="2GIS object_id")
+):
+    """ custom command """
+
+    from ..net.company_reviews import CompanyReviewsIterator
+    
+    object_id = resolve_alias(object_id)
+
+    cri = CompanyReviewsIterator(object_id=object_id)
+    last_dt = None    
+    for review in cri:
+        # "date_created": "2025-08-26T17:26:19.136724+07:00",
+        # created = dateutil.parser.isoparse(review['date_created']).replace(microsecond=0, tzinfo=None)
+        # edited = dateutil.parser.isoparse(review['date_edited']).replace(microsecond=0, tzinfo=None) if review.get('date_edited') else None
+
+        date_field = "date_edited" if review.get('date_edited') else "date_created"
+
+        dt = dateutil.parser.isoparse(review[date_field]).replace(microsecond=0, tzinfo=None)
+
+        # print_json(data=review)
+        if last_dt:
+            print(dt, dt < last_dt)
+            if dt > last_dt < dt:
+                print("!!! DATE DECREASED !!!")
+                raise ValueError("Date decreased")
+                # print_json(data=review)
+
+        last_dt = dt
+
+
+@app.command(name="cust2")
+# @click.pass_context
+def cmd_cust2(
+    public_id: str = typer.Argument(..., help="public_id of author")
+):
+    """ custom command """
+
+    from ..net.author_reviews import AuthorReviewsIterator
+    
+
+    ri = AuthorReviewsIterator(public_id=public_id)
+    last_dt = None    
+    for review in ri:
+        # "date_created": "2025-08-26T17:26:19.136724+07:00",
+        # created = dateutil.parser.isoparse(review['date_created']).replace(microsecond=0, tzinfo=None)
+        # edited = dateutil.parser.isoparse(review['date_edited']).replace(microsecond=0, tzinfo=None) if review.get('date_edited') else None
+
+        # print_json(data=review)
+
+        # date_field = "date_edited" if review.get('date_edited') else "date_created"
+        date_field = "date_edited"
+
+        dt = dateutil.parser.isoparse(review[date_field]).replace(microsecond=0, tzinfo=None)
+        dtedited = dateutil.parser.isoparse(review["date_edited"]).replace(microsecond=0, tzinfo=None)
+
+        # print_json(data=review)
+        if last_dt:            
+            print(dt, dtedited, dt < last_dt)
+            if dt > last_dt < dt:
+                print("!!! DATE DECREASED !!!")                
+                raise ValueError("Date decreased")
+                # print_json(data=review)
+
+        last_dt = dt
 
 
 

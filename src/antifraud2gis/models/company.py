@@ -23,8 +23,9 @@ from typing import Generator, Iterator
 from random import randint
 
 from datetime import datetime, timezone, timedelta
+import dateutil
 
-from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, func, select, or_, and_
+from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, func, select, or_, and_, inspect
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor, Session, noload
 
 from ..settings import settings
@@ -44,7 +45,7 @@ from ..logger import logger_verbose
 #class RelationDict:
 #    pass
 
-
+"""  Add region_id (can take from company reviews) """
 
 class Company(Base):
 
@@ -67,9 +68,12 @@ class Company(Base):
     branch_count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
     rating_2gis: Mapped[float] = mapped_column(Float, nullable=True)
 
+    region_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
     metrics_calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
-    reviews: Mapped[list["Review"]] = relationship(back_populates="company", cascade="all, delete-orphan")
+    reviews: Mapped[list["Review"]] = relationship(back_populates="company", cascade="all, delete-orphan",
+        order_by="Review.created.desc()")
 
     metrics: Mapped[list["Metric"]] = relationship(back_populates="company", cascade="all, delete-orphan")
 
@@ -152,7 +156,7 @@ class Company(Base):
         return result
 
     @classmethod
-    def search(cls, dbsession, query: str, limit: Optional[int] = None):
+    def search(cls, dbsession, query: str, limit: Optional[int] = None  ):
         words = [w.strip().lower() for w in query.split() if w.strip()]
         conditions = [cls.search_str.like(f"%{w}%") for w in words]
 
@@ -180,7 +184,7 @@ class Company(Base):
         return True
 
     @classmethod
-    def fetch(cls, object_id: str, full=False) -> None:
+    def fetch(cls, object_id: str, full=False, notolder: datetime | None = None) -> None:
 
         from .review import Review
         # dbsession = dbsession or DBSession()
@@ -221,6 +225,13 @@ class Company(Base):
 
                     public_id = r['user']['public_id']
 
+                    if notolder is not None:
+                        review_date = dateutil.parser.parse(r['date_created'])
+                        if review_date <= notolder:
+                            print("skipping review date", review_date, "older than", notolder)
+                            break
+                        else:
+                            print("processing review date", review_date, "newer than", notolder)
 
                     stats_reviews += 1
                     if r['provider'] == '2gis':
@@ -233,12 +244,44 @@ class Company(Base):
                         # public_id '' on https://2gis.ru/novosibirsk/firm/70000001099934045/
 
                         try:
-                            u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)                            
+                            #u = Author.get_or_fetch(public_id=public_id, dbsession=dbsession)
+                            with DBSession() as author_dbsession:
+                                u = Author.get(public_id=public_id, dbsession=author_dbsession)
+                                if u is None:
+                                    u = Author.fetch(public_id=public_id)
+                                    u = author_dbsession.merge(u)
+                                    if u.private:
+                                        print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
+                                else:
+                                    print(f"existing author: {public_id} pvt: {u.private} (update)")
+                                    if not u.private:
+                                        u.update_reviews(dbsession=author_dbsession)
+                                
+                                if u.private:
+                                    # save review anyway
+                                    if not Review.exists_in_db(r['id'], author_dbsession):
+                                        print("save private review anyway")
+                                        _review = Review(
+                                            id=r['id'],
+                                            author=u,
+                                            _name=None, # name will be takes from _user.name
+                                            object_id=object_id,
+                                            provider=r['provider'],
+                                            rating=r['rating'],
+                                            created=datetime.fromisoformat(r['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
+                                        )
+                                        author_dbsession.add(_review)
+                                    else:
+                                        print("Private review already in DB:", r['id'])
+
+
+                                author_dbsession.commit()
+                        
                         except AFAuthorUnavailable as e:
                             logger.error(f"Author {public_id} unavailable: {e}")
                             continue
 
-                        # u = dbsession.merge(u)
+                        u = dbsession.merge(u)
 
                         if u.private:
                             stats_private += 1
@@ -335,7 +378,7 @@ class Company(Base):
            
         tags = " "
 
-        return f'Company({self.object_id} {self.title} ({self.rating_2gis}) addr: {self.city}, {self.address} {tags})'
+        return f'Company({self.object_id} {self.title} ({self.rating_2gis}) r{self.region_id} addr: {self.city}, {self.address} {tags})'
 
     def get_title(self):
         return self.title
@@ -398,3 +441,38 @@ class Company(Base):
                     return False
                 
         return True
+
+    def get_metric(self, name: str) -> Optional["Metric"]:
+        return next((m for m in self.metrics if m.name == name), None)
+
+
+    def newest_review_db(self, dbsession: Session) -> Optional[datetime]:
+        from .review import Review
+
+        stmt = select(func.max(Review.created)).where(Review.object_id == self.object_id)
+        dt: datetime | None = dbsession.scalar(stmt)
+        if dt:
+            dt = dt.replace(tzinfo=timezone.utc)
+        return dt
+    
+    def newest_review_net(self) -> Optional[datetime]:
+        cr = CompanyReviewsIterator(object_id=self.object_id)
+        newest_date = None
+
+        for r in cr:
+            review_date = dateutil.parser.parse(r['date_created'])
+            if newest_date is None or review_date > newest_date:
+                newest_date = review_date
+
+        return newest_date
+
+    def update_reviews(self, dbsession: Session, full: bool = False) -> None:
+        """ load new reviews from network """
+        print(f"Update reviews for company {self.object_id}")
+        if full:
+            newest = None
+        else:
+            newest = self.newest_review_db(dbsession=dbsession)
+            print("NEWEST:",newest, "tz:", newest.tzinfo)
+
+        Company.fetch(object_id=self.object_id, full=True, notolder=newest)

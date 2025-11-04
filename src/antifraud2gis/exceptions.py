@@ -24,6 +24,7 @@ class AFAuthorPrivate(AFException):
 
 class AFAuthorUnavailable(AFException):
     # 500 from 2gis. e.g. 412846e8aca14251bb470de8bb4578ac
+    # 404 from 2gis. e.g. f88ae363201048c29b77a39a6e2af4b7 or 57be482e014e463dabc7ceea0a58f4fd (aurora)
     pass
 
 class AFCompanyNotFound(AFException):

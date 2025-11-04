@@ -20,12 +20,24 @@ from ..fraud import detect
 from ..db import DBSession
 from ..settings import settings
 from ..models import Author, Review, Company, Metric
+from sqlalchemy import select, func
 
 
-def printsummary():
+def printstatus():
     with DBSession() as dbsession:
         print("Nusers:", Author.nusers(dbsession=dbsession))
         print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count():,} metrics: {dbsession.query(Company).filter(Company.metrics_calculated).count():,}")
+
+        count_neg1 = dbsession.scalar(
+            select(func.count()).select_from(Company).where(Company.region_id == -1)
+        )
+
+        count_other = dbsession.scalar(
+            select(func.count()).select_from(Company).where(Company.region_id != -1)
+        )
+
+        print(f"Regions: {count_other} defined / {count_neg1} undefined")
+
         print(f"Reviews: {dbsession.query(Review).count()}")
         print(f"Metrics: {dbsession.query(Metric).count()}")
 

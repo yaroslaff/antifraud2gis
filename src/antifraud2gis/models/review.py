@@ -179,11 +179,14 @@ class Review(Base):
         rdata = dict(
             id=self.id,
             author_id=self.author_id,
+            private=self.author.private if self.author else None,
             author_created=None,
             object_id=self.object_id,
             name=self.name,
-            provider=self.provider,            
+            provider=self.provider,
             rating=self.rating,
+            
+            # created: when review was written (in 2gis)
             created=self.created.strftime("%Y-%m-%d %H:%M:%S"),
             # author_age: how old was autho
             author_age=(self.created - self.author.created).days if self.author else None,                        
@@ -195,6 +198,19 @@ class Review(Base):
             rdata['author_created'] = None
 
         return rdata
+
+    @classmethod
+    def exists_in_db(cls, review_id: str, dbsession: Session) -> bool:
+        #stmt = select(exists().where(Review.id == self.id))
+
+        #n = dbsession.query(func.count(Review.id))\
+        #        .filter(Review.id == review_data['id'])\
+        #        .scalar()
+
+
+        # check if review is already in db
+        stmt = select(exists().where(Review.id == review_id))
+        return bool(dbsession.scalar(stmt))
 
     def __repr__(self):
         # print_json(data=self._data)
