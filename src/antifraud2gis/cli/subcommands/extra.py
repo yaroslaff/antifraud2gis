@@ -71,8 +71,6 @@ def top_author(limit: int = typer.Option(5, "--limit", "-l", help="Number of top
         #for author, num in dbsession.execute(top_authors_stmt):
         #    print(f"{author}: {num} reviews")
 
-
-
         print(f"# elapsed: {time.time() - started:.2f} sec")
 
 def fix_region_id_author(public_id: str, dbsession: Session):
@@ -81,7 +79,11 @@ def fix_region_id_author(public_id: str, dbsession: Session):
     ar = AuthorReviewsIterator(public_id=public_id, timeout=10)
     miss = 0
     hit = 0
+
+    review_ids = list()
+
     for ard in ar:
+        review_ids.append(ard['id'])
         region_id = ard['region_id']
         print(f"Obj: {ard['object']['id']}")
         try:
@@ -103,6 +105,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
             hit += 1
     
     print(f"hit: {hit} miss: {miss}...")
+    return review_ids
 
 
 @extra_app.command(name="fix-region-id")
@@ -138,7 +141,8 @@ def fix_region_id(
         )
         public_id = dbsession.scalar(stmt)
 
-        fix_region_id_author(public_id=public_id, dbsession=dbsession)
+        review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
+        print(review_ids)
 
         dbsession.commit()
 
@@ -147,8 +151,10 @@ def fix_region_id(
             stmt = select(Review).where(Review.object_id == company.object_id, Review.author_id == public_id)
             r = dbsession.scalar(stmt)
             print("Problem is in revew:", r)
-            r.deleted = True
-            dbsession.commit()
+            if r.id not in review_ids:
+                print(f"DELETE review {r.id}")
+                r.deleted = True
+                dbsession.commit()
 
     elapsed = time.time() - started
 
