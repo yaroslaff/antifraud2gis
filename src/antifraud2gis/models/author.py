@@ -96,6 +96,18 @@ class Author(Base):
         return user
 
     @classmethod
+    def is_private_net(cls, public_id: str) -> bool:
+        """ True if user is private """
+        base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
+        r = http_session.get(base_url)
+        r.raise_for_status()
+
+        data = r.json()
+
+        return data['public_user']['privacy'] == 'CLOSE'
+
+
+    @classmethod
     def fetch_base(cls, public_id: str, dbsession) -> 'Author':
         base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
         r = http_session.get(base_url)

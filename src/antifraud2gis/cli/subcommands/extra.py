@@ -13,7 +13,7 @@ from ...models.review import Review
 from ...aliases import resolve_alias
 from ...metrics import run_metrics, save_metrics
 from ...logger import logger
-from ...exceptions import AFNoCompany
+from ...exceptions import AFNoCompany, AFAuthorUnavailable
 from ...net.author_reviews import AuthorReviewsIterator
 
 extra_app = typer.Typer(help="misc eXtra commands")
@@ -144,15 +144,25 @@ def fix_region_id(
 
         stmt = (
             select(Review.author_id, func.count().label("cnt"))
-            .where(Review.object_id == company.object_id, Review.deleted == 0, Review.author_id.is_not(None))
-            .group_by(Review.author_id)
-            .order_by(func.count().desc())
-            .limit(1)
-        )
+                .join(Author, Review.author_id == Author.public_id)
+                .where(Review.object_id == company.object_id, Review.deleted == 0, Review.author_id.is_not(None), Author.private.is_(False))
+                .group_by(Review.author_id)
+                .order_by(func.count().desc())
+                .limit(1)
+            )
         public_id = dbsession.scalar(stmt)
 
-        review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
-        print(f"Processed reviews: {' '.join(review_ids)}")
+        try:
+            review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
+            print(f"Processed reviews: {' '.join(review_ids)}")
+        except AFAuthorUnavailable as e:
+            print(f"Unavailale author {public_id} {e}")
+            if Author.is_private_net(public_id=public_id):
+                print("Profile is private! Update in db")
+                a = Author.get(public_id=public_id, dbsession=dbsession)
+                a.private = True
+                dbsession.commit()
+                return
 
         dbsession.commit()
 
