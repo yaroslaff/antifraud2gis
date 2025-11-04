@@ -116,9 +116,6 @@ def fix_region_id(
                 print(f"No company: {ard['object']['id']}")
                 continue
 
-            if c.error:
-                print("Skip error company")
-
             print(f"  Set r{region_id} to {c}")
             c.region_id = region_id
         print("Commit...")
