@@ -11,11 +11,12 @@ from rich import print_json
 
 
 class AuthorReviewsIterator:
-    def __init__(self, public_id: str):
+    def __init__(self, public_id: str, timeout=None):
         self.public_id = public_id
         self.url = f'https://api.auth.2gis.com/public-profile/1.1/user/{self.public_id}/content/feed?page_size=20'
         self.page = 1
         self.meta = None
+        self.timeout = timeout
         self._reviews = []
 
     def __iter__(self):
@@ -39,7 +40,8 @@ class AuthorReviewsIterator:
 
         # logger.debug(f"ITER Loading reviews p{self.page} for author {self.public_id} from {self.url}")
         try:
-            r = http_session.get(self.url)
+            print(f"fetch new page p{self.page} for author {self.public_id}")
+            r = http_session.get(self.url, timeout=self.timeout)
         except requests.exceptions.RetryError as e:
             logger.error(f"Cannot get reviews for {self.public_id} from {self.url}")
             raise AFAuthorUnavailable
