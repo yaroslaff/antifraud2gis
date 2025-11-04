@@ -40,11 +40,13 @@ class AuthorReviewsIterator:
 
         # logger.debug(f"ITER Loading reviews p{self.page} for author {self.public_id} from {self.url}")
         try:
-            print(f"fetch new page p{self.page} for author {self.public_id}")
+            # print(f"fetch new page p{self.page} for author {self.public_id}")
             if self.page:
                 # wait 2s for each next page
-                time.sleep(2)
+                # time.sleep(2)
+                pass
             r = http_session.get(self.url, timeout=self.timeout)
+            # print(f"result: {r.status_code} {len(r.text)}")
         except requests.exceptions.RetryError as e:
             logger.error(f"Cannot get reviews for {self.public_id} from {self.url}")
             raise AFAuthorUnavailable
@@ -61,8 +63,7 @@ class AuthorReviewsIterator:
             r.raise_for_status()
 
         data = r.json()
-
-
+        
         self._reviews = data['content_feed']
 
         try:
