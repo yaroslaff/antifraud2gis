@@ -127,7 +127,7 @@ def fix_region_id(
 
     if elapsed < sleep:
         sleeptime = sleep-elapsed
-        print(f"Sleep {sleeptime}")
+        print(f"Sleep {sleeptime:.1f}")
         time.sleep(sleeptime)
 
 
