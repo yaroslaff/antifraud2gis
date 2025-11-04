@@ -346,7 +346,7 @@ class Company(Base):
 
 
     @classmethod
-    def check_company_alive(self, object_id: str):
+    def check_company_alive(cls, object_id: str):
         start_town = 'moscow'
         r = http_session.head(f'https://2gis.ru/{start_town}/firm/{object_id}', allow_redirects=True)
         if False and r.history:

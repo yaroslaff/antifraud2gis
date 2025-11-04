@@ -123,11 +123,21 @@ def fix_region_id(
         if object_id:
             company = Company.get(object_id=object_id, dbsession=dbsession)
         else:
-            stmt = select(Company).where(Company.region_id == -1).limit(1)
+            # we should skip company.error because some companies are deleted
+            stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
             company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
 
         if company is None:
+            return
+
+
+        try:
+            Company.check_company_alive(company.object_id)
+        except AFNoCompany as e:
+            print(e)
+            company.error = str(e)
+            dbsession.commit()
             return
 
         started = time.time()
@@ -142,7 +152,7 @@ def fix_region_id(
         public_id = dbsession.scalar(stmt)
 
         review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
-        print(review_ids)
+        print(f"Processed reviews: {' '.join(review_ids)}")
 
         dbsession.commit()
 
