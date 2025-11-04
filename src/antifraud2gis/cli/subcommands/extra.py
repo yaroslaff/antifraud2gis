@@ -85,7 +85,8 @@ def fix_region_id(
     started = time.time()
 
     with DBSession() as dbsession:
-        stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
+        #? Company.error.is_(None)
+        stmt = select(Company).where(Company.region_id == -1).limit(1)
         company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
 
