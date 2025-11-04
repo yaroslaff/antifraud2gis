@@ -104,6 +104,8 @@ def fix_region_id(
         print(f"Use author {public_id}")
 
         ar = AuthorReviewsIterator(public_id=public_id, timeout=10)
+        miss = 0
+        hit = 0
         for ard in ar:
             region_id = ard['region_id']
             print(f"Obj: {ard['object']['id']}")
@@ -118,8 +120,14 @@ def fix_region_id(
                 continue
 
             print(f"  Set r{region_id} to {c}")
-            c.region_id = region_id
-        print("Commit...")
+            if c.region_id == region_id:
+                miss = 0
+            else:
+                c.region_id = region_id
+                hit = 0
+
+        
+        print(f"Commit hit: {hit} miss: {miss}...")
         dbsession.commit()
 
     elapsed = time.time() - started
