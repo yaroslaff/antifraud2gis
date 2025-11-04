@@ -75,9 +75,40 @@ def top_author(limit: int = typer.Option(5, "--limit", "-l", help="Number of top
 
         print(f"# elapsed: {time.time() - started:.2f} sec")
 
+def fix_region_id_author(public_id: str, dbsession: Session):
+    print(f"Use author {public_id}")
+
+    ar = AuthorReviewsIterator(public_id=public_id, timeout=10)
+    miss = 0
+    hit = 0
+    for ard in ar:
+        region_id = ard['region_id']
+        print(f"Obj: {ard['object']['id']}")
+        try:
+            c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
+        except AFNoCompany:
+            print(f"AFNoCompany {ard['object']['id']}")
+            continue
+
+        if c is None:
+            print(f"No company: {ard['object']['id']}")
+            continue
+
+        if c.region_id == region_id:
+            print(f"{c} already has r{region_id}")
+            miss += 1
+        else:
+            print(f"  Set r{region_id} to {c}")
+            c.region_id = region_id
+            hit += 1
+    
+    print(f"hit: {hit} miss: {miss}...")
+
+
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
     limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    object_id: str = typer.Option(None, "--company", "-c", help="object_id"),
     sleep: int = typer.Option(5, "--sleep", "-s", help="Min time to process (sleep to get this time, rate-limiting)")
     ):
     """ Fix region ID """
@@ -86,49 +117,38 @@ def fix_region_id(
 
     with DBSession() as dbsession:
         #? Company.error.is_(None)
-        stmt = select(Company).where(Company.region_id == -1).limit(1)
-        company = dbsession.scalars(stmt).first()
+        if object_id:
+            company = Company.get(object_id=object_id, dbsession=dbsession)
+        else:
+            stmt = select(Company).where(Company.region_id == -1).limit(1)
+            company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
+
+        if company is None:
+            return
 
         started = time.time()
 
         stmt = (
             select(Review.author_id, func.count().label("cnt"))
-            .where(Review.object_id == company.object_id, Review.author_id.is_not(None))
+            .where(Review.object_id == company.object_id, Review.deleted == 0, Review.author_id.is_not(None))
             .group_by(Review.author_id)
             .order_by(func.count().desc())
             .limit(1)
         )
         public_id = dbsession.scalar(stmt)
 
-        print(f"Use author {public_id}")
+        fix_region_id_author(public_id=public_id, dbsession=dbsession)
 
-        ar = AuthorReviewsIterator(public_id=public_id, timeout=10)
-        miss = 0
-        hit = 0
-        for ard in ar:
-            region_id = ard['region_id']
-            print(f"Obj: {ard['object']['id']}")
-            try:
-                c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
-            except AFNoCompany:
-                print(f"AFNoCompany {ard['object']['id']}")
-                continue
-
-            if c is None:
-                print(f"No company: {ard['object']['id']}")
-                continue
-
-            print(f"  Set r{region_id} to {c}")
-            if c.region_id == region_id:
-                miss = 0
-            else:
-                c.region_id = region_id
-                hit = 0
-
-        
-        print(f"Commit hit: {hit} miss: {miss}...")
         dbsession.commit()
+
+        if company.region_id == -1:
+            print(f"NOT FIXED company: {company}")
+            stmt = select(Review).where(Review.object_id == company.object_id, Review.author_id == public_id)
+            r = dbsession.scalar(stmt)
+            print("Problem is in revew:", r)
+            r.deleted = True
+            dbsession.commit()
 
     elapsed = time.time() - started
 

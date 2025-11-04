@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sqlalchemy.orm import Session, Mapped, mapped_column, relationship
-from sqlalchemy import String, Text, Float, Integer, DateTime, ForeignKey, select, exists
+from sqlalchemy import String, Text, Float, Integer, DateTime, ForeignKey, Boolean, select, exists
 
 from datetime import datetime, timezone
 from rich import print_json
@@ -28,6 +28,8 @@ class Review(Base):
     author: Mapped[Author] = relationship(back_populates="reviews")
     company: Mapped[Company] = relationship(back_populates="reviews")
 
+    # if review is deleted on 2gis
+    deleted: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
 
     # _user: 'User'
