@@ -158,8 +158,9 @@ def fix_region_id(
                 company.region_id = -2
                 dbsession.commit()
                 return
-        else:
-            raise NotImplementedError
+            else:
+                # no reviews but we have company in db??
+                raise NotImplementedError
 
         try:
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
