@@ -73,9 +73,7 @@ def top_author(limit: int = typer.Option(5, "--limit", "-l", help="Number of top
 
         print(f"# elapsed: {time.time() - started:.2f} sec")
 
-def fix_region_id_author(public_id: str, dbsession: Session):
-    print(f"Use author {public_id}")
-
+def fix_region_id_author(public_id: str, dbsession: Session):    
     ar = AuthorReviewsIterator(public_id=public_id, timeout=10)
     miss = 0
     hit = 0
@@ -150,7 +148,7 @@ def fix_region_id(
                 .order_by(func.count().desc())
                 .limit(1)
             )
-        public_id = dbsession.scalar(stmt)
+        public_id, cnt = dbsession.execute(stmt).first()
 
         if public_id is None:
             if company.nreviews() == 0:
@@ -163,6 +161,7 @@ def fix_region_id(
                 raise NotImplementedError
 
         try:
+            print(f"Use author {public_id} ({cnt})")
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
             print(f"Processed reviews: {' '.join(review_ids)}")
         except AFAuthorUnavailable as e:
