@@ -78,41 +78,46 @@ def top_author(limit: int = typer.Option(5, "--limit", "-l", help="Number of top
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
     limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
-    sleep: int = typer.Option(30, "--sleep", "-s", help="Min time to process (sleep to get this time, rate-limiting)")
+    sleep: int = typer.Option(5, "--sleep", "-s", help="Min time to process (sleep to get this time, rate-limiting)")
     ):
     """ Fix region ID """
     
     started = time.time()
-    stmt = (
-        select(Review.author_id, func.count().label("cnt"))
-            .join(Company, Review.object_id == Company.object_id)
-            .where(Company.region_id == -1, Review.author_id.is_not(None))
-            .group_by(Review.author_id)
-            .order_by(func.count().desc())
-            .limit(limit)
-    )
 
     with DBSession() as dbsession:
-        top_authors = dbsession.execute(stmt).all()
-        print(f"Top authors (Elapsed: {int(time.time() - started)})")
-        for public_id, n in top_authors:
-            print(public_id, n)
-            ar = AuthorReviewsIterator(public_id=public_id)
-            for ard in ar:
-                region_id = ard['region_id']
-                print(f"obj: {ard['object']['id']}")
-                try:
-                    c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
-                except AFNoCompany:
-                    print(f"AFNoCompany {ard['object']['id']}")
-                    continue
+        stmt = select(Company).where(Company.region_id == -1).limit(1)
+        company = dbsession.scalars(stmt).first()
+        print("Fix company:", company)
 
-                if c is None:
-                    print(f"No company: {ard['object']['id']}")
-                    continue
+        started = time.time()
 
-                print(f"Set r{region_id} to {c}")
-                c.region_id = region_id
+        stmt = (
+            select(Review.author_id, func.count().label("cnt"))
+            .where(Review.object_id == company.object_id, Review.author_id.is_not(None))
+            .group_by(Review.author_id)
+            .order_by(func.count().desc())
+            .limit(1)
+        )
+        public_id = dbsession.scalar(stmt)
+
+        print("Use author {public_id}")
+
+        ar = AuthorReviewsIterator(public_id=public_id)
+        for ard in ar:
+            region_id = ard['region_id']
+            print(f"obj: {ard['object']['id']}")
+            try:
+                c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
+            except AFNoCompany:
+                print(f"AFNoCompany {ard['object']['id']}")
+                continue
+
+            if c is None:
+                print(f"No company: {ard['object']['id']}")
+                continue
+
+            print(f"Set r{region_id} to {c}")
+            c.region_id = region_id
         print("Commit...")
         dbsession.commit()
 

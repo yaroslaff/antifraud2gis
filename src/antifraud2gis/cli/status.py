@@ -25,7 +25,7 @@ from sqlalchemy import select, func
 
 def printstatus():
     with DBSession() as dbsession:
-        print("Nusers:", Author.nusers(dbsession=dbsession))
+        print("Authors:", Author.nusers(dbsession=dbsession))
         print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count():,} metrics: {dbsession.query(Company).filter(Company.metrics_calculated).count():,}")
 
         count_neg1 = dbsession.scalar(
