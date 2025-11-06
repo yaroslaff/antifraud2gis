@@ -61,6 +61,8 @@ class Author(Base):
     # created: when af2gis last updated it
     updated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
     
+    seen: Mapped[str] = mapped_column(String, nullable=True)
+
     reviews: Mapped[list["Review"]] = relationship(
         back_populates="author",
         cascade="all, delete-orphan",
@@ -105,7 +107,6 @@ class Author(Base):
         data = r.json()
 
         return data['public_user']['privacy'] == 'CLOSE'
-
 
     @classmethod
     def fetch_base(cls, public_id: str, dbsession) -> 'Author':
@@ -152,7 +153,7 @@ class Author(Base):
         for review_data in ar:            
             # save company (if needed)
             obj = review_data['object']
-            
+
             if obj['type'] != 'branch':
                 # we process only companies type=branch
                 # skip types: attraction adm_div
@@ -193,7 +194,6 @@ class Author(Base):
             # dbsession.commit()
 
 
-
     @classmethod
     def fetch(cls, public_id: str) -> 'Author':
 
@@ -210,7 +210,7 @@ class Author(Base):
                 return _author
             
             try:
-                _author.update_reviews(dbsession=dbsession)
+                df = _author.update_reviews(dbsession=dbsession)
             except requests.HTTPError as e:
                 print(f"HTTP error fetching author {public_id}: {e}")
                 raise AFAuthorUnavailable(f"HTTP error fetching author {public_id}: {e}")

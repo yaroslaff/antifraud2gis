@@ -106,6 +106,74 @@ def fix_region_id_author(public_id: str, dbsession: Session):
     return review_ids
 
 
+@extra_app.command(name="fix-seen1")
+def fix_seen1(
+    limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    ):
+    """ Fix region ID """
+    
+    started = time.time()
+
+    print("Pass 1: See Authors from Company")
+    # find unseens authors which we can see
+    stmt = (select(Company, Review, Author).
+            join(Company.reviews).
+            join(Review.author).
+            where(Company.seen.isnot(None), Author.seen.is_(None)).
+            limit(limit))
+
+    while True:
+        fixed = 0
+        started = time.time()
+        with DBSession() as dbsession:
+            for c,r,a in dbsession.execute(stmt):
+                print(f"{r.created.date()} {c.object_id} {c.title} {a.public_id} {a.name} [seen:{a.seen}]")
+                if a.seen is None:
+                    a.seen = c.object_id
+                    fixed += 1
+
+            dbsession.commit()
+
+        elapsed = int(time.time()-started)
+        print(f"Fixed {fixed} records in {elapsed} seconds")
+        if fixed == 0:
+            return
+
+
+@extra_app.command(name="fix-seen2")
+def fix_seen2(
+    limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    ):
+    """ Fix region ID """
+    
+    print("Pass 2: See Companies from Authors")
+    # find unseens companies which we can see
+    stmt = (select(Author, Review, Company).
+            join(Author.reviews).
+            join(Review.company).
+            where(Company.seen.is_(None), Author.seen.isnot(None)).
+            limit(limit))
+
+    while True:
+
+        started = time.time()
+        fixed=0
+
+
+        with DBSession() as dbsession:
+            for a,r,c in dbsession.execute(stmt):
+                print(f"{r.created.date()} {a.public_id} ({a.name}) {a.seen}: {c.object_id} {c.title} [seen:{c.seen}]")
+                if c.seen is None:
+                    c.seen = a.public_id
+                    fixed += 1
+            dbsession.commit()
+        elapsed = int(time.time()-started)
+        print(f"Fixed {fixed} records in {elapsed} seconds")
+        if fixed == 0:
+            return
+
+
+
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
     limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
@@ -126,9 +194,9 @@ def fix_region_id(
             company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
 
+
         if company is None:
             return
-
 
         try:
             Company.check_company_alive(company.object_id)
@@ -177,7 +245,7 @@ def fix_region_id(
 
         if company.region_id == -1:
             print(f"NOT FIXED company: {company}")
-            stmt = select(Review).where(Review.object_id == company.object_id, Review.author_id == public_id)
+            stmt = select(Review).where(Review.object_id == company.object_id, Review.author_id == public_id, Review.deleted == False)
             r = dbsession.scalar(stmt)
             print("Problem is in revew:", r)
             if r.id not in review_ids:

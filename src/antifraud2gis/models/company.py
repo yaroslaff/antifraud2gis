@@ -25,7 +25,7 @@ from random import randint
 from datetime import datetime, timezone, timedelta
 import dateutil
 
-from sqlalchemy import Column, String, Text, Integer, Float, DateTime, ForeignKey, func, select, or_, and_, inspect
+from sqlalchemy import Column, String, Text, Integer, Float, Boolean, DateTime, ForeignKey, func, select, or_, and_, inspect
 from sqlalchemy.orm import declarative_base, relationship, Mapped, mapped_column, reconstructor, Session, noload
 
 from ..settings import settings
@@ -60,6 +60,9 @@ class Company(Base):
     address: Mapped[str | None] = mapped_column(String, nullable=True)  # Null only for error companies, e.g. geo
     error: Mapped[str | None] = mapped_column(String, nullable=True)
     search_str: Mapped[str] = mapped_column(String, nullable=False)
+    seen: Mapped[str] = mapped_column(String, nullable=True)
+
+
 
     # datetime of full load (or last update)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
@@ -255,7 +258,7 @@ class Company(Base):
                                 else:
                                     print(f"existing author: {public_id} pvt: {u.private} (update)")
                                     if not u.private:
-                                        u.update_reviews(dbsession=author_dbsession)
+                                        df = u.update_reviews(dbsession=author_dbsession)
                                 
                                 if u.private:
                                     # save review anyway
@@ -473,6 +476,11 @@ class Company(Base):
             newest = None
         else:
             newest = self.newest_review_db(dbsession=dbsession)
-            print("NEWEST:",newest, "tz:", newest.tzinfo)
+            # print("NEWEST:",newest, "tz:", newest.tzinfo)
 
         Company.fetch(object_id=self.object_id, full=True, notolder=newest)
+
+    def is_symmetric_net(self):
+        """ return True if company is normal (=symmetric), reviews are visible both in company and in author view """
+        pass
+    
