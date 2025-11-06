@@ -141,7 +141,7 @@ def fix_seen1(
 
         elapsed = int(time.time()-started)
         iter_elapsed = int(time.time() - iter_started)
-        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time})")
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time} limit: {limit})")
         if iter_fixed == 0:
             return
 
@@ -183,7 +183,7 @@ def fix_seen2(
             dbsession.commit()
         elapsed = int(time.time()-started)
         iter_elapsed = int(time.time() - iter_started)
-        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time})")
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time} limit: {limit})")
 
         if iter_fixed == 0:
             return
