@@ -128,7 +128,8 @@ def fix_seen1(
         iter_started = time.time()
         with DBSession() as dbsession:
             res = dbsession.execute(stmt).all()
-            print(f"SELECT took {int(time.time() - iter_started)}s")
+            select_time = int(time.time() - iter_started)
+            print(f"SELECT took {select_time}s")
             for c,r,a in res:
                 print(f"{r.created.date()} {c.object_id} {c.title} {a.public_id} {a.name} [seen:{a.seen}]")
                 if a.seen is None:
@@ -140,7 +141,7 @@ def fix_seen1(
 
         elapsed = int(time.time()-started)
         iter_elapsed = int(time.time() - iter_started)
-        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds")
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time})")
         if iter_fixed == 0:
             return
 
@@ -170,7 +171,8 @@ def fix_seen2(
 
         with DBSession() as dbsession:
             res = dbsession.execute(stmt).all()
-            print(f"SELECT took {int(time.time() - iter_started)}s")
+            select_time = int(time.time() - iter_started)
+            print(f"SELECT took {select_time}s")
             for a,r,c in res:
                 print(f"{r.created.date()} {a.public_id} ({a.name}) {a.seen}: {c.object_id} {c.title} [seen:{c.seen}]")
                 if c.seen is None:
@@ -181,7 +183,7 @@ def fix_seen2(
             dbsession.commit()
         elapsed = int(time.time()-started)
         iter_elapsed = int(time.time() - iter_started)
-        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds")
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time})")
 
         if iter_fixed == 0:
             return
