@@ -108,11 +108,12 @@ def fix_region_id_author(public_id: str, dbsession: Session):
 
 @extra_app.command(name="fix-seen1")
 def fix_seen1(
-    limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Number of authors to process"),
     ):
     """ Fix region ID """
     
     started = time.time()
+    fixed = 0
 
     print("Pass 1: See Authors from Company")
     # find unseens authors which we can see
@@ -123,29 +124,36 @@ def fix_seen1(
             limit(limit))
 
     while True:
-        fixed = 0
-        started = time.time()
+        iter_fixed = 0
+        iter_started = time.time()
         with DBSession() as dbsession:
-            for c,r,a in dbsession.execute(stmt):
+            res = dbsession.execute(stmt)
+            print(f"SELECT took {int(time.time() - iter_started)}s")
+            for c,r,a in res:
                 print(f"{r.created.date()} {c.object_id} {c.title} {a.public_id} {a.name} [seen:{a.seen}]")
                 if a.seen is None:
                     a.seen = c.object_id
+                    iter_fixed += 1
                     fixed += 1
 
             dbsession.commit()
 
         elapsed = int(time.time()-started)
-        print(f"Fixed {fixed} records in {elapsed} seconds")
-        if fixed == 0:
+        iter_elapsed = int(time.time() - iter_started)
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds")
+        if iter_fixed == 0:
             return
 
 
 @extra_app.command(name="fix-seen2")
 def fix_seen2(
-    limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    limit: int = typer.Option(100, "--limit", "-l", help="Number of authors to process"),
     ):
     """ Fix region ID """
     
+    started = time.time()
+    fixed = 0
+
     print("Pass 2: See Companies from Authors")
     # find unseens companies which we can see
     stmt = (select(Author, Review, Company).
@@ -156,20 +164,26 @@ def fix_seen2(
 
     while True:
 
-        started = time.time()
-        fixed=0
+        iter_started = time.time()
+        iter_fixed=0
 
 
         with DBSession() as dbsession:
-            for a,r,c in dbsession.execute(stmt):
+            res = dbsession.execute(stmt)
+            print(f"SELECT took {int(time.time() - iter_started)}s")
+            for a,r,c in res:
                 print(f"{r.created.date()} {a.public_id} ({a.name}) {a.seen}: {c.object_id} {c.title} [seen:{c.seen}]")
                 if c.seen is None:
                     c.seen = a.public_id
-                    fixed += 1
+                    iter_fixed += 1
+                    fixed +=1
+
             dbsession.commit()
         elapsed = int(time.time()-started)
-        print(f"Fixed {fixed} records in {elapsed} seconds")
-        if fixed == 0:
+        iter_elapsed = int(time.time() - iter_started)
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds")
+
+        if iter_fixed == 0:
             return
 
 
