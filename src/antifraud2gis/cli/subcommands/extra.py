@@ -127,7 +127,7 @@ def fix_seen1(
         iter_fixed = 0
         iter_started = time.time()
         with DBSession() as dbsession:
-            res = dbsession.execute(stmt)
+            res = dbsession.execute(stmt).all()
             print(f"SELECT took {int(time.time() - iter_started)}s")
             for c,r,a in res:
                 print(f"{r.created.date()} {c.object_id} {c.title} {a.public_id} {a.name} [seen:{a.seen}]")
@@ -169,7 +169,7 @@ def fix_seen2(
 
 
         with DBSession() as dbsession:
-            res = dbsession.execute(stmt)
+            res = dbsession.execute(stmt).all()
             print(f"SELECT took {int(time.time() - iter_started)}s")
             for a,r,c in res:
                 print(f"{r.created.date()} {a.public_id} ({a.name}) {a.seen}: {c.object_id} {c.title} [seen:{c.seen}]")
