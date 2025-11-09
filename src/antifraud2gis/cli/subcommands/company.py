@@ -166,3 +166,17 @@ def сompany_wipe(oid: str, full: bool = typer.Option(False, "--full", help="Wip
         except AFNoCompany as e:
             logger.error(e)
         dbsession.commit()
+
+@company_app.command(name="error")
+def сompany_error(oid: str, error: str = typer.Argument(help="Error message or - to reset")):
+    object_id = resolve_alias(oid)
+    with DBSession() as dbsession:
+        try:
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            if error == '-':
+                c.error = None
+            else:
+                c.error = error
+        except AFNoCompany as e:
+            logger.error(e)
+        dbsession.commit()
