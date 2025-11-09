@@ -54,5 +54,5 @@ class CompanyReviewsIterator:
         if self.url and ':8080' in self.url:
             self.url = self.url.replace(':8080', '')
 
-
-
+    def __repr__(self):
+        return f"CompanyReviewsIretator {self.object_id}"
