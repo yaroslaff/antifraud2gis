@@ -96,7 +96,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
             continue
 
         if c.region_id == region_id:
-            print(f"{c} already has r{region_id}")
+            # print(f"{c} already has r{region_id}")
             miss += 1
         else:
             print(f"  Set r{region_id} to {c}")
