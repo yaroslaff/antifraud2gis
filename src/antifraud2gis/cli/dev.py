@@ -41,7 +41,7 @@ from ..settings import settings
 from ..fraud import detect, dump_report
 from ..exceptions import AFNoCompany, AFNoTitle, AFCompanyError
 from ..aliases import resolve_alias
-from .status import printstatus
+from .status import print_full_status
 from ..tasks import submit_fraud_task, cooldown_queue
 from ..const import REDIS_TASK_QUEUE_NAME, REDIS_TRUSTED_LIST, REDIS_UNTRUSTED_LIST, REDIS_WORKER_STATUS, REDIS_WORKER_STATUS_SET, \
                         REDIS_DRAMATIQ_QUEUE, REVIEWS_KEY, \

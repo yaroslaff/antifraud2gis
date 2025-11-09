@@ -5,6 +5,7 @@ import sys
 import time
 import json
 from builtins import print as _print
+from datetime import datetime
 
 from argalias import ArgAlias
 
@@ -21,7 +22,7 @@ from pathlib import Path
 # import sqlite3
 
 import sqlalchemy
-from sqlalchemy import create_engine, select
+from sqlalchemy import create_engine, select, func, case
 from sqlalchemy.orm import Session
 import typer
 
@@ -43,7 +44,7 @@ from ..db import DBSession, ScopedDBSession, check_or_create_db
 
 
 # CLI
-from .status import printstatus
+# from .status import print_full_status
 
 # from .summary import add_summary_parser, handle_summary, printsummary
 #from .company import add_company_parser, handle_company
@@ -108,9 +109,57 @@ def any_filter(args):
 
 
 @app.command()
-def status():
+def status(substatus: str | None = typer.Argument(None, help="db status (None, region, seen)")):
     """ status: database summary """
-    printstatus()
+
+    now = datetime.now()
+
+    if substatus is None:
+        print_full_status()
+    elif substatus == 'seen':
+        with DBSession() as dbsession:
+            stmt = select(
+                func.count().label("total"),
+                func.sum(case((Company.seen.is_(None), 1), else_=0)).label("unseen"),
+                func.sum(case((Company.seen.is_not(None), 1), else_=0)).label("seen")
+            )
+            total, unseen, seen = dbsession.execute(stmt).one()
+            print(f"{now:%Y-%m-%d %H:%M}: {total=} {unseen=} {seen=}")
+    elif substatus == 'region':
+        with DBSession() as dbsession:
+            stmt = select(
+                func.count().label("total"),
+                func.sum(case((Company.region_id<=0, 1)), else_=0).label("no_region"),
+                func.sum(case((Company.region_id>0, 1)), else_=0).label("region")
+            )
+            total, no_region, region = dbsession.execute(stmt).one()
+            print(f"{now:%Y-%m-%d %H:%M}: {total=} {no_region=} {region=}")
+    else:
+        print(f"Sorry, do not know substatus {substatus!r}", file=sys.stderr)
+
+def print_full_status():
+
+    from ..models.review import Review
+    from ..models.metric import Metric
+
+    with DBSession() as dbsession:
+        print("Authors:", Author.nusers(dbsession=dbsession))
+        print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count():,} metrics: {dbsession.query(Company).filter(Company.metrics_calculated).count():,}")
+
+        count_neg1 = dbsession.scalar(
+            select(func.count()).select_from(Company).where(Company.region_id == -1)
+        )
+
+        count_other = dbsession.scalar(
+            select(func.count()).select_from(Company).where(Company.region_id != -1)
+        )
+
+        print(f"Regions: {count_other} defined / {count_neg1} undefined")
+
+        print(f"Reviews: {dbsession.query(Review).count()}")
+        print(f"Metrics: {dbsession.query(Metric).count()}")
+
+
 
 @app.command(name="aliases")
 def cmd_aliases():
@@ -232,7 +281,7 @@ def main():
         print(f"Stopfile {stopfile} created")
 
     elif args.cmd == "status":
-        printstatus()
+        print_full_status()
 
     elif args.cmd == "aliases":
         for oid, alias_rec in aliases.items():

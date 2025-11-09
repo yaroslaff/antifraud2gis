@@ -23,7 +23,7 @@ from ..models import Author, Review, Company, Metric
 from sqlalchemy import select, func
 
 
-def printstatus():
+def print_full_status():
     with DBSession() as dbsession:
         print("Authors:", Author.nusers(dbsession=dbsession))
         print(f"Companies known: {dbsession.query(Company).count()} loaded: {dbsession.query(Company).filter(Company.updated_at).count():,} metrics: {dbsession.query(Company).filter(Company.metrics_calculated).count():,}")
@@ -40,4 +40,5 @@ def printstatus():
 
         print(f"Reviews: {dbsession.query(Review).count()}")
         print(f"Metrics: {dbsession.query(Metric).count()}")
+
 
