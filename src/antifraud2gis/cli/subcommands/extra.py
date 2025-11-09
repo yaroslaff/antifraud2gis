@@ -15,6 +15,7 @@ from ...metrics import run_metrics, save_metrics
 from ...logger import logger
 from ...exceptions import AFNoCompany, AFAuthorUnavailable
 from ...net.author_reviews import AuthorReviewsIterator
+from ...net.company_reviews import CompanyReviewsIterator
 
 extra_app = typer.Typer(help="misc eXtra commands")
 
@@ -141,7 +142,7 @@ def fix_seen1(
 
         elapsed = int(time.time()-started)
         iter_elapsed = int(time.time() - iter_started)
-        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time} limit: {limit})")
+        print(f"Fixed {iter_fixed}/{fixed} records in {elapsed}/{iter_elapsed} seconds (select: {select_time} limit: {limit })")
         if iter_fixed == 0:
             return
 
@@ -190,6 +191,29 @@ def fix_seen2(
 
 
 
+@extra_app.command(name="fix-seen-authors")
+def fix_seen_authors():
+
+    stmt = select(Author).where(Author.seen.is_(None), Author.private==False)
+
+    with DBSession() as dbsession:
+        for a in dbsession.scalars(stmt):
+            print(f"seen: {a.seen} pvt: {a.private} {a.public_id} {a.name}")
+            for r in a.reviews:
+                print(f"  {r}")
+
+@extra_app.command(name="x")
+def x(object_id: str = typer.Argument(help="object_id")):
+    with DBSession() as dbsession:
+        company = Company.get(object_id=resolve_alias(object_id), dbsession=dbsession)
+        if company is None:
+            print("miss company", object_id)
+            return
+        print(company)        
+        company.has_public_reviews(dbsession=dbsession)
+
+
+
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
     limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
@@ -210,9 +234,12 @@ def fix_region_id(
             company = dbsession.scalars(stmt).first()
         print("Fix company:", company)
 
-
         if company is None:
             return
+
+        if company.region_id != -1:
+            time.sleep(30)
+            raise AssertionError(f"{company.object_id} has r:{company.region_id}")
 
         try:
             Company.check_company_alive(company.object_id)
@@ -232,7 +259,14 @@ def fix_region_id(
                 .order_by(func.count().desc())
                 .limit(1)
             )
-        public_id, cnt = dbsession.execute(stmt).first()
+        
+        res = dbsession.execute(stmt).first()
+        if res is None:
+            print("No good review for this")
+            time.sleep(30)
+            return
+
+        public_id, cnt = res
 
         if public_id is None:
             if company.nreviews() == 0:
@@ -247,7 +281,7 @@ def fix_region_id(
         try:
             print(f"Use author {public_id} ({cnt})")
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
-            print(f"Processed reviews: {' '.join(review_ids)}")
+            print(f"Processed {len(review_ids)} reviews: {' '.join(review_ids)}")
         except AFAuthorUnavailable as e:
             print(f"Unavailale author {public_id} {e}")
             if Author.is_private_net(public_id=public_id):
@@ -279,4 +313,34 @@ def fix_region_id(
         time.sleep(sleeptime)
 
 
+
+@extra_app.command(name="fix-region-id-net")
+def fix_region_id_net(
+    limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
+    object_id: str = typer.Option(None, "--company", "-c", help="object_id"),
+    sleep: int = typer.Option(5, "--sleep", "-s", help="Min time to process (sleep to get this time, rate-limiting)")
+    ):
+    """ Fix region ID """
+    
+    started = time.time()
+
+    with DBSession() as dbsession:
+        #? Company.error.is_(None)
+        if object_id:
+            company = Company.get(object_id=object_id, dbsession=dbsession)
+        else:
+            # we should skip company.error because some companies are deleted
+            stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
+            company = dbsession.scalars(stmt).first()
+        print("Fix company:", company)
+
+        if company is None:
+            return
+
+        if company.region_id != -1:
+            time.sleep(30)
+            raise AssertionError(f"{company.object_id} has r:{company.region_id}")
+
+
+        cri = CompanyReviewsIterator(object_id=object_id)
 

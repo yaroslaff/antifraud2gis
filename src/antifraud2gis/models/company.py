@@ -233,8 +233,9 @@ class Company(Base):
                         if review_date <= notolder:
                             print("skipping review date", review_date, "older than", notolder)
                             break
-                        else:
-                            print("processing review date", review_date, "newer than", notolder)
+                        #else:
+                            # seems always newer
+                            # print("processing review date", review_date, "newer than", notolder)
 
                     stats_reviews += 1
                     if r['provider'] == '2gis':
@@ -251,7 +252,7 @@ class Company(Base):
                             with DBSession() as author_dbsession:
                                 u = Author.get(public_id=public_id, dbsession=author_dbsession)
                                 if u is None:
-                                    u = Author.fetch(public_id=public_id)
+                                    u = Author.fetch(public_id=public_id, seen=object_id)
                                     u = author_dbsession.merge(u)
                                     if u.private:
                                         print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
@@ -347,6 +348,15 @@ class Company(Base):
             statistics.total_companies_loaded+=1
             statistics.total_companies_loaded_network+=1
 
+    def has_public_reviews(self, dbsession: Session) -> bool:
+        """ check db if it has reviews from non-private users (detect medical organizations)  """
+        from .review import Review
+
+        stmt = select(Review).join(Author).where(Review.object_id == self.object_id, Author.private==False)
+        res = dbsession.scalars(stmt)
+        print(res)
+        r, a = res
+        print(r, a)
 
     @classmethod
     def check_company_alive(cls, object_id: str):

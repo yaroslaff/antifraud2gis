@@ -132,8 +132,8 @@ def info(oid: str):
             if c is None:
                 print("Not found company locally, loading from network")
                 c = Company.get_or_fetch(object_id=object_id, dbsession=dbsession, full=False)
-        except (AFNoCompany, AFNoTitle):
-            print(f"Company {oid} not found")
+        except (AFNoCompany, AFNoTitle) as e:
+            print(f"Company {oid} not found: {e}")
             return
         c = dbsession.merge(c)
         print(c.info())

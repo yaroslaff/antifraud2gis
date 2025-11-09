@@ -109,7 +109,7 @@ class Author(Base):
         return data['public_user']['privacy'] == 'CLOSE'
 
     @classmethod
-    def fetch_base(cls, public_id: str, dbsession) -> 'Author':
+    def fetch_base(cls, public_id: str, seen: str, dbsession) -> 'Author':
         base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
         r = http_session.get(base_url)
         r.raise_for_status()
@@ -122,6 +122,7 @@ class Author(Base):
             public_id=public_id, 
             name=data['public_user']['name'], 
             private=private,
+            seen=seen,
             created = datetime.fromtimestamp(int(data['public_user']['created_at']), tz=timezone.utc),
             updated = datetime.now(tz=timezone.utc).replace(microsecond=0))
         dbsession.add(_user)        
@@ -165,7 +166,13 @@ class Author(Base):
 
                 if True:
                     # normal company may have no address, e.g. 70000001083275091
-                    _company = Company(object_id=obj['id'], region_id=review_data['region_id'], title=obj['name'], city=city, address=address)
+                    _company = Company(
+                        object_id=obj['id'], 
+                        region_id=review_data['region_id'], 
+                        title=obj['name'], 
+                        city=city, 
+                        address=address,
+                        seen = self.public_id)
                     _company.update_search_str()
                     dbsession.add(_company)
                     dbsession.commit()
@@ -195,14 +202,14 @@ class Author(Base):
 
 
     @classmethod
-    def fetch(cls, public_id: str) -> 'Author':
+    def fetch(cls, public_id: str, seen: str) -> 'Author':
 
         with DBSession() as dbsession:
 
             _author = None
 
             # get base info for user
-            _author = cls.fetch_base(public_id=public_id, dbsession=dbsession)
+            _author = cls.fetch_base(public_id=public_id, seen=seen, dbsession=dbsession)
 
             if _author.private:
                 # do not fetch reviews if user has private profile

@@ -11,7 +11,7 @@ class Settings():
         # algorithm version
         self.algo = 1
 
-        self.storage = Path("~/.af2gis-storage").expanduser()
+        self.storage = Path("~/.af2gis").expanduser()
 
         self.dburl = "sqlite:///" + str(self.storage / "db.sqlite3")
         self.requests_cache_path = str(self.storage / "cache.sqlite3")
