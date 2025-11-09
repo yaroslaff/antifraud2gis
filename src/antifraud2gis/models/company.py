@@ -486,9 +486,11 @@ class Company(Base):
             newest = None
         else:
             newest = self.newest_review_db(dbsession=dbsession)
-            # print("NEWEST:",newest, "tz:", newest.tzinfo)
-
-        Company.fetch(object_id=self.object_id, full=True, notolder=newest)
+            # print("NEWEST:",newest, "tz:", newest.tzinfo) 
+        try:
+            Company.fetch(object_id=self.object_id, full=True, notolder=newest)
+        except AFNoCompany as e:
+            self.error = str(e)
 
     def is_symmetric_net(self):
         """ return True if company is normal (=symmetric), reviews are visible both in company and in author view """
