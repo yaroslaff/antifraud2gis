@@ -84,7 +84,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
     for ard in ar:
         review_ids.append(ard['id'])
         region_id = ard['region_id']
-        print(f"Obj: {ard['object']['id']}")
+        # print(f"Obj: {ard['object']['id']}")
         try:
             c = Company.get(object_id=ard['object']['id'], dbsession=dbsession)
         except AFNoCompany:
