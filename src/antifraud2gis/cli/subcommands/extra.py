@@ -262,9 +262,13 @@ def fix_region_id(
         
         res = dbsession.execute(stmt).first()
         if res is None:
-            print("No good review for this")
-            time.sleep(30)
-            return
+            print("No good review for this, fix via company reviews")
+            cri = CompanyReviewsIterator(object_id=object_id)
+            for r in cri:
+                company.region_id = r['region_id']
+                print(f"set r{company.region_id} for {company}")
+                dbsession.commit()                
+                return
 
         public_id, cnt = res
 
