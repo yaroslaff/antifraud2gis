@@ -132,7 +132,7 @@ def сompany_authors(oid: str):
             print(r)
 
 @company_app.command(name="fetch")
-def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", help="Fetch full company data")):
+def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", "-f", help="Fetch full company data")):
     object_id = resolve_alias(oid)
     with DBSession() as dbsession:
 
