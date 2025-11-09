@@ -124,7 +124,18 @@ def status(substatus: str | None = typer.Argument(None, help="db status (None, r
                 func.sum(case((Company.seen.is_not(None), 1), else_=0)).label("seen")
             )
             total, unseen, seen = dbsession.execute(stmt).one()
-            print(f"{now:%Y-%m-%d %H:%M}: {total=} {unseen=} {seen=}")
+            print(f"{now:%Y-%m-%d %H:%M}: Companies {total=} {unseen=} {seen=}")
+
+            stmt = select(
+                func.count().label("total"),
+                func.sum(case((Author.seen.is_(None), 1), else_=0)).label("unseen"),
+                func.sum(case((Author.seen.is_not(None), 1), else_=0)).label("seen")
+            )
+            total, unseen, seen = dbsession.execute(stmt).one()
+            print(f"{now:%Y-%m-%d %H:%M}: Authors {total=} {unseen=} {seen=}")
+
+
+
     elif substatus == 'region':
         with DBSession() as dbsession:
             stmt = select(
