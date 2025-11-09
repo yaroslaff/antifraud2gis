@@ -273,7 +273,7 @@ def fix_region_id(
 
         if res is None:
             print(f"res is still None! company: {company.object_id}")
-            sleep(30)
+            time.sleep(30)
             raise AssertionError
 
         public_id, cnt = res
