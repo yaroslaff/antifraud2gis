@@ -328,9 +328,10 @@ def fix_region_id(
         if company.region_id == -1:
             print(f"NOT FIXED company: {company}, reinit")            
             dbsession.delete(company)
-            company = Company.fetch(object_id=company.object_id, dbsession=dbsession)
-            print("Reborn company:", company)
             dbsession.commit()
+            company = Company.fetch(object_id=company.object_id, full=True)
+            print("Reborn company:", company)
+            
 
 
     elapsed = time.time() - started
