@@ -267,6 +267,8 @@ def fix_region_id(
             # we should skip company.error because some companies are deleted
             stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
             company = dbsession.scalars(stmt).first()
+        
+        print()
         print("### Fix company:", company)
 
         if company is None:
@@ -298,30 +300,35 @@ def fix_region_id(
         #    )        
         # res = dbsession.execute(stmt).first()
 
-        review_id, public_id, cnt = get_top_author(company.object_id, dbsession=dbsession)
-        print(f"Will work via {review_id}, {public_id} ({cnt})")
+        res = get_top_author(company.object_id, dbsession=dbsession)
+        if res is None:
+            print(f"No known public profiles for {company}. update?")
+            company.update_reviews(dbsession=dbsession, full=True)
+            res = get_top_author(company.object_id, dbsession=dbsession)
+            if res is None:
+                print("Still no good review for this, fix via company reviews")
+                cri = CompanyReviewsIterator(object_id=company.object_id)
+                for r in cri:
+                    company.region_id = r['region_id']
+                    print(f"set r{company.region_id} for {company}")
+                    dbsession.commit()                
+                    return
+                
+                # we could not found reviews
+                if company.nreviews() == 0:
+                    print("Company has no reviews, ok...")
+                    company.region_id = -2
+                    dbsession.commit()
+                    return        
 
-        if review_id is None:
-            print("No good review for this, fix via company reviews")
-            cri = CompanyReviewsIterator(object_id=company.object_id)
-            for r in cri:
-                company.region_id = r['region_id']
-                print(f"set r{company.region_id} for {company}")
-                dbsession.commit()                
-                return
-            
-            # we could not found reviews
-            if company.nreviews() == 0:
-                print("Company has no reviews, ok...")
-                company.region_id = -2
-                dbsession.commit()
-                return        
+        review_id, public_id, cnt = res
+        print(f"Will work via {review_id}, {public_id} ({cnt})")
 
         try:
             print(f"Use author {public_id} ({cnt})")
 
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
-            print(f"Processed {len(review_ids)} reviews: {' '.join(review_ids)}")
+            print(f"Processed {len(review_ids)} reviews")
         except AFAuthorUnavailable as e:
             print(f"Unavailale author {public_id} {e}")
             if Author.is_private_net(public_id=public_id):
