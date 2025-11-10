@@ -133,10 +133,18 @@ def reviews(public_id: str,
 
 
 @author_app.command(name="reviews-net")
-def reviews_net(public_id: str, brief: bool = typer.Option(False, "--brief", "-b", help="brief")):
+def reviews_net(
+    public_id: str, 
+    oid: str = typer.Argument(None, help="Dump only review for this object_id"),
+    brief: bool = typer.Option(False, "--brief", "-b", help="brief")):
     """ show reviews for author """
     ar = AuthorReviewsIterator(public_id=public_id)
     for r in ar:
+
+        if oid and r['object']['id'] != oid:
+            # print(f"Skip review for {r['object']['id']}")
+            continue
+
         if brief:
             print(f"{dateutil.parser.parse(r['date_created']).date()} {r['object']['id']} ({r['object']['address'].split(',')[0]}) {r['object']['name']} {r['rating']}")  
         else:

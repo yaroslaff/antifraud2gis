@@ -81,6 +81,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
 
     review_ids = list()
 
+
     for ard in ar:
         review_ids.append(ard['id'])
         region_id = ard['region_id']
@@ -213,6 +214,34 @@ def x(object_id: str = typer.Argument(help="object_id")):
         company.has_public_reviews(dbsession=dbsession)
 
 
+def get_top_author(object_id: str, dbsession: Session):
+
+    # Subquery: authors who reviewed this company
+    authors_subq = (
+        select(Review.author_id)
+        .where(Review.object_id == object_id, Review.deleted == 0)
+        .distinct()
+        .subquery()
+    )
+
+    # Main query: total reviews per such author (any company)
+    stmt = (
+        select(
+            Review.id,
+            Review.author_id,            
+            func.count().label("cnt")
+        )
+        .where(
+            Review.deleted == 0,
+            Review.author_id.in_(select(authors_subq.c.author_id))
+        )
+        .group_by(Review.author_id)
+        .order_by(func.count().desc())
+    )
+
+    res = dbsession.execute(stmt).first()    
+    return res
+
 
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
@@ -251,17 +280,20 @@ def fix_region_id(
 
         started = time.time()
 
-        stmt = (
-            select(Review.author_id, func.count().label("cnt"))
-                .join(Author, Review.author_id == Author.public_id)
-                .where(Review.object_id == company.object_id, Review.deleted == 0, Review.author_id.is_not(None), Author.private.is_(False))
-                .group_by(Review.author_id)
-                .order_by(func.count().desc())
-                .limit(1)
-            )
-        
-        res = dbsession.execute(stmt).first()
-        if res is None:
+        #stmt = (
+        #    select(Review.author_id, func.count().label("cnt"))
+        #        .join(Author, Review.author_id == Author.public_id)
+        #        .where(Review.object_id == company.object_id, Review.deleted == 0, Review.author_id.is_not(None), Author.private.is_(False))
+        #        .group_by(Review.author_id)
+        #        .order_by(func.count().desc())
+        #        .limit(1)
+        #    )        
+        # res = dbsession.execute(stmt).first()
+
+        review_id, public_id, cnt = get_top_author(company.object_id, dbsession=dbsession)
+        print(f"Will work via {review_id}, {public_id} ({cnt})")
+
+        if review_id is None:
             print("No good review for this, fix via company reviews")
             cri = CompanyReviewsIterator(object_id=company.object_id)
             for r in cri:
@@ -275,14 +307,11 @@ def fix_region_id(
                 print("Company has no reviews, ok...")
                 company.region_id = -2
                 dbsession.commit()
-                return
-
-
-
-        public_id, cnt = res
+                return        
 
         try:
             print(f"Use author {public_id} ({cnt})")
+
             review_ids = fix_region_id_author(public_id=public_id, dbsession=dbsession)
             print(f"Processed {len(review_ids)} reviews: {' '.join(review_ids)}")
         except AFAuthorUnavailable as e:
@@ -305,6 +334,8 @@ def fix_region_id(
                 print(f"DELETE review {r.id} ({r.rating})")
                 r.deleted = True
                 dbsession.commit()
+            else:
+                print(f"Review {r.id} in {review_ids}")
 
     elapsed = time.time() - started
 
