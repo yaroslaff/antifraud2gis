@@ -3,6 +3,7 @@ import numpy as np
 from sqlalchemy import select, func, case
 import time
 from rich import print_json
+import sys
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
@@ -219,7 +220,12 @@ def get_top_author(object_id: str, dbsession: Session):
     # Subquery: authors who reviewed this company
     authors_subq = (
         select(Review.author_id)
-        .where(Review.object_id == object_id, Review.deleted == 0)
+        .join(Author)
+
+        .where(
+            Review.object_id == object_id, 
+            Review.deleted == 0,
+            Author.private.is_(False))
         .distinct()
         .subquery()
     )
@@ -261,14 +267,16 @@ def fix_region_id(
             # we should skip company.error because some companies are deleted
             stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
             company = dbsession.scalars(stmt).first()
-        print("Fix company:", company)
+        print("### Fix company:", company)
 
         if company is None:
             return
 
-        if company.region_id != -1:
-            time.sleep(30)
-            raise AssertionError(f"{company.object_id} has r:{company.region_id}")
+        if company.region_id != -1:            
+            print(f"{company.object_id} ALREADY has r:{company.region_id}", file=sys.stderr)
+            time.sleep(5)
+            return
+            
 
         try:
             Company.check_company_alive(company.object_id)
@@ -363,7 +371,7 @@ def fix_region_id_net(
             # we should skip company.error because some companies are deleted
             stmt = select(Company).where(Company.region_id == -1, Company.error.is_(None)).limit(1)
             company = dbsession.scalars(stmt).first()
-        print("Fix company:", company)
+        print("### Fix company:", company)
 
         if company is None:
             return
