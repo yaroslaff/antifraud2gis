@@ -326,16 +326,12 @@ def fix_region_id(
         dbsession.commit()
 
         if company.region_id == -1:
-            print(f"NOT FIXED company: {company}")
-            stmt = select(Review).where(Review.object_id == company.object_id, Review.author_id == public_id, Review.deleted == False)
-            r = dbsession.scalar(stmt)
-            print("Problem is in revew:", r)
-            if r.id not in review_ids:
-                print(f"DELETE review {r.id} ({r.rating})")
-                r.deleted = True
-                dbsession.commit()
-            else:
-                print(f"Review {r.id} in {review_ids}")
+            print(f"NOT FIXED company: {company}, reinit")            
+            dbsession.delete(company)
+            company = Company.fetch(object_id=company.object_id, dbsession=dbsession)
+            print("Reborn company:", company)
+            dbsession.commit()
+
 
     elapsed = time.time() - started
 
