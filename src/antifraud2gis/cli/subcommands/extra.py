@@ -94,7 +94,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
             continue
 
         if c is None:
-            print(f"No company: {ard['object']['id']}")
+            # print(f"No company: {ard['object']['id']}")
             continue
 
         if c.region_id == region_id:
