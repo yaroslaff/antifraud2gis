@@ -269,24 +269,17 @@ def fix_region_id(
                 print(f"set r{company.region_id} for {company}")
                 dbsession.commit()                
                 return
-
-
-        if res is None:
-            print(f"res is still None! company: {company.object_id}")
-            time.sleep(30)
-            raise AssertionError
-
-        public_id, cnt = res
-
-        if public_id is None:
+            
+            # we could not found reviews
             if company.nreviews() == 0:
                 print("Company has no reviews, ok...")
                 company.region_id = -2
                 dbsession.commit()
                 return
-            else:
-                # no reviews but we have company in db??
-                raise NotImplementedError
+
+
+
+        public_id, cnt = res
 
         try:
             print(f"Use author {public_id} ({cnt})")
