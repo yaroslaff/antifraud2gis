@@ -56,7 +56,7 @@ class AuthorReviewsIterator:
             # it's possible sometimes
             raise NotImplementedError
 
-        elif r.status_code in [400, 500]:
+        elif r.status_code in [400, 500, 404]:
             logger.warning(f"user {self.public_id} reviews error {r.status_code} url: {self.url}")
             raise StopIteration
         else:
