@@ -249,6 +249,8 @@ def get_top_author(object_id: str, dbsession: Session):
     return res
 
 
+
+
 @extra_app.command(name="fix-region-id")
 def fix_region_id(
     limit: int = typer.Option(5, "--limit", "-l", help="Number of authors to process"),
@@ -287,6 +289,8 @@ def fix_region_id(
             company.error = str(e)
             dbsession.commit()
             return
+
+        print("zzz company is alive")
 
         started = time.time()
 
