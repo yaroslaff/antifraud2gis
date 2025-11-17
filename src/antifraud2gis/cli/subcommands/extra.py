@@ -290,8 +290,6 @@ def fix_region_id(
             dbsession.commit()
             return
 
-        print("zzz company is alive")
-
         started = time.time()
 
         #stmt = (
