@@ -15,6 +15,8 @@ class MetricPerc(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
     city: Mapped[str] = mapped_column(String, nullable=False)
     name: Mapped[str] = mapped_column(String, nullable=False)
+    region_id: Mapped[int] = mapped_column(Integer, nullable=False)
+
     p: Mapped[int] = mapped_column(Integer, nullable=False)
     value: Mapped[float] = mapped_column(Float, nullable=False)
     calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)

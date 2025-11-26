@@ -20,11 +20,12 @@ def save_metrics(c: Company, metrics: dict, dbsession: Session):
         if metric:
             metric.value = value
         else:
-            metric = Metric(company=c, name=metric_name, value=value)
+            metric = Metric(company=c, region_id=c.region_id, name=metric_name, value=value)
             dbsession.add(metric)
 
     c.metrics_calculated = datetime.datetime.now()
     c.metrics_signature = settings.param_fp()
+    
     dbsession.add(c)
     dbsession.commit()
 
