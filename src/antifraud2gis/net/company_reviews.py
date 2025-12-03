@@ -5,8 +5,9 @@ import requests
 import time
 
 class CompanyReviewsIterator:
-    def __init__(self, object_id: str):
+    def __init__(self, object_id: str, timeout=None):
         self.object_id = object_id
+        self.timeout = timeout
         self.url = f'https://public-api.reviews.2gis.com/2.0/branches/{self.object_id}/reviews?limit=50&fields=meta.providers,meta.branch_rating,meta.branch_reviews_count,meta.total_count,reviews.hiding_reason,reviews.is_verified&without_my_first_review=false&rated=true&sort_by=friends&key={REVIEWS_KEY}&locale=ru_RU'
         self.pages_loaded = 0 # increased only for page with 1+ reviews
         self.meta = None
@@ -30,7 +31,7 @@ class CompanyReviewsIterator:
         while r is None:
 
             try:                    
-                r = http_session.get(self.url)
+                r = http_session.get(self.url, timeout=self.timeout)
             except requests.RequestException as e:
                 print("RequestException", e)
                 time.sleep(1)

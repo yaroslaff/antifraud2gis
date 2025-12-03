@@ -196,7 +196,7 @@ class Company(Base):
 
         with DBSession() as dbsession:
 
-            cr = CompanyReviewsIterator(object_id=object_id)
+            cr = CompanyReviewsIterator(object_id=object_id, timeout=60)
 
             progress_total = None
             current_review_idx = 1

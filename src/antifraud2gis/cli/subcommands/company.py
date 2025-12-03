@@ -169,7 +169,7 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
             for idx,c in enumerate(dbsession.scalars(stmt)):
                 print(f"fetch {idx}/{count} {c}")
                 try:
-                    Company.fetch(c.object_id)
+                    Company.fetch(c.object_id, full=full)
                 except AFNoCompany as e:
                     logger.error(e)
                     c.error = str(e)
