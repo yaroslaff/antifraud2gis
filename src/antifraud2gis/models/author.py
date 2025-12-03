@@ -149,7 +149,7 @@ class Author(Base):
             return city.replace(u'\xa0', u' '), address
 
         # fetch reviews from network and update self.reviews
-        ar = AuthorReviewsIterator(public_id=self.public_id)
+        ar = AuthorReviewsIterator(public_id=self.public_id, timeout=60)
 
         for review_data in ar:            
             # save company (if needed)
