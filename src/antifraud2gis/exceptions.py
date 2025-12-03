@@ -30,3 +30,7 @@ class AFAuthorUnavailable(AFException):
 class AFCompanyNotFound(AFException):
     # company not found in LMDB 
     pass
+
+class AFNetworkProblem(AFException):
+    # any network problem
+    pass
