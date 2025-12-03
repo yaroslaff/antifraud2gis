@@ -3,7 +3,7 @@ from ..session import http_session
 from loguru import logger
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from ..session import http_session
-from ..exceptions import AFAuthorUnavailable
+from ..exceptions import AFAuthorUnavailable, AFNetworkProblem
 import requests
 
 import time
@@ -47,7 +47,7 @@ class AuthorReviewsIterator:
                 pass
             r = http_session.get(self.url, timeout=self.timeout)
             # print(f"result: {r.status_code} {len(r.text)}")
-        except requests.exceptions.RetryError as e:
+        except (requests.exceptions.RetryError, requests.exceptions.ConnectionError) as e:
             logger.error(f"Cannot get reviews for {self.public_id} from {self.url}")
             raise AFAuthorUnavailable
 
