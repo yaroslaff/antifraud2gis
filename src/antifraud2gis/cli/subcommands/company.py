@@ -157,6 +157,7 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                     print("fetched:", c)
                 except AFNoCompany as e:
                     logger.error(e)
+                    c.error = str(e)                    
         else:
             # no object_id, (:all). process region
             if region_id is None:
@@ -167,7 +168,15 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
             count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
             for idx,c in enumerate(dbsession.scalars(stmt)):
                 print(f"fetch {idx}/{count} {c}")
-                Company.fetch(c.object_id)
+                try:
+                    Company.fetch(c.object_id)
+                except AFNoCompany as e:
+                    logger.error(e)
+                    c.error = str(e)
+
+        print("commit")
+        dbsession.commit()
+
 
 
 
