@@ -1,6 +1,6 @@
 import typer
 
-from sqlalchemy import select, func, case
+from sqlalchemy import select, func, case, desc
 
 from rich.console import Console
 from rich.table import Table
@@ -144,3 +144,42 @@ def reports_city(city: str = typer.Option(None, "-c", "--city", help="Process on
             console.print(table)
     
 
+@reports_app.command(name="region")
+def reports_region(region_id: int | None = typer.Argument(None, help="region_id or nothing"),
+                   limit: int | None = typer.Option(None, "-l", help="limit to top N records")):
+    """ show companies per region """
+    if region_id is None:
+        with DBSession() as dbsession:
+            stmt = (
+                dbsession.query(
+                    Company.region_id,
+                    func.count().label("company_count")
+                )
+                .group_by(Company.region_id)
+                .order_by(desc("company_count"))
+            )
+
+            if limit:
+                stmt = stmt.limit(limit)
+
+            for region_id, cnt in dbsession.execute(stmt):
+                print(f"region {region_id} : {cnt}")
+        return
+
+    # region_id given
+    with DBSession() as dbsession:
+        stmt = (
+            dbsession.query(
+                Company.city,
+                func.count().label("company_count")
+            )
+            .filter(Company.region_id == region_id)
+            .group_by(Company.city)
+            .order_by(desc("company_count"))
+        )
+
+        if limit:
+            stmt = stmt.limit(limit)
+
+        for city, cnt in dbsession.execute(stmt):
+            print(f"{city:20} {cnt}")

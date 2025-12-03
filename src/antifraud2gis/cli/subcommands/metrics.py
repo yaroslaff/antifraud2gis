@@ -75,13 +75,17 @@ def countdown(n=10):
 
 
 @metrics_app.command(name="wipe")
-def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
+def metrics_wipe(
+    oid: str = typer.Argument(help="show only for object_id"),
+    region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")
+    ):
     """ wipe metrics """
     object_id = resolve_alias(oid) if oid.lower() != ':all' else None
     print("wipe metrics...", object_id)
 
-    with DBSession() as dbsession:
-        if oid.lower() == ':all':
+    with DBSession() as dbsession:        
+        if oid.lower() == ':all' and region_id is None:
+            # WHOLE DATABASE
             print("wipe metrics for ALL companies")
             countdown()
 
@@ -94,10 +98,27 @@ def metrics_wipe(oid: str = typer.Argument(help="show only for object_id")):
 
             dbsession.commit()
 
-        elif object_id:
-            c = Company.get(object_id=object_id, dbsession=dbsession)
-            c.wipe_metrics(dbsession=dbsession)
-            dbsession.commit()
+        else:
+            if object_id:
+                c = Company.get(object_id=object_id, dbsession=dbsession)
+                c.wipe_metrics(dbsession=dbsession)
+                dbsession.commit()
+            else:
+
+
+                stmt = select(Company).where(Company.region_id == region_id, Company.metrics_calculated.isnot(None))
+
+                count_stmt = select(func.count()).select_from(stmt.subquery())
+                count = dbsession.scalar(count_stmt)
+                print(f"Total: {count} records")
+
+
+                for c in dbsession.scalars(stmt):
+                    print(f"delete metrics for {c}")
+                    c.metrics_calculated = None
+                    c.metrics.clear()
+                print("commit")
+                dbsession.commit()
 
         #ndeleted = stmt.delete()
         #dbsession.commit()
@@ -123,7 +144,7 @@ def metrics_run_code(c: Company):
             return
                 
         data = c.data_reviews()
-        print_json(data=data)
+        # print_json(data=data)
 
         logger.debug(f"Load {len(data)} authors...")
         # company df
@@ -142,9 +163,6 @@ def metrics_run_code(c: Company):
                 a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession2)
                 adf = pd.concat([adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))], ignore_index=True)
 
-        print("ADF:", adf['provider'].value_counts())
-
-
         logger.debug("Running metrics...")
         try:
             metrics = run_metrics(c.object_id, cdf, adf)
@@ -162,8 +180,9 @@ def metrics_run_code(c: Company):
 
 @metrics_app.command(name="run")
 def metrics_run(
-    oid: str = typer.Argument(..., help="2GIS object_id"),
-    city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")
+    oid: str = typer.Argument(..., help="2GIS object_id or :all"),
+    city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
+    region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")
     ):
     """ run metrics for company or :all companies """
 
@@ -183,6 +202,9 @@ def metrics_run(
 
             if city:
                 filters = and_(filters, Company.city == city)
+
+            if region_id:
+                filters = and_(filters, Company.region_id == region_id)
 
             total = dbsession.scalar(
                 select(func.count()).select_from(Company).where(filters)

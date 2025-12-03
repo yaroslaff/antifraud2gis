@@ -6,6 +6,8 @@ import dateutil
 import pandas as pd
 import sys
 
+from sqlalchemy import select, func, and_
+
 from ...models import Company, Author
 from ...db import DBSession
 from ...aliases import resolve_alias
@@ -132,25 +134,42 @@ def сompany_authors(oid: str):
             print(r)
 
 @company_app.command(name="fetch")
-def сompany_fetch(oid: str, full: bool = typer.Option(False, "--full", "-f", help="Fetch full company data")):
-    object_id = resolve_alias(oid)
+def сompany_fetch(oid: str = typer.Argument(None, help="object_id"), 
+                full: bool = typer.Option(False, "--full", "-f", help="Fetch full company data"),
+                region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")):
+
+    object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
     with DBSession() as dbsession:
 
-        c = Company.get(object_id=object_id, dbsession=dbsession)
-        if(c):
-            print("Refresh data for existing company:", c)
-            c.update_reviews(dbsession=dbsession, full=full)
-            dbsession.commit()
-            return
-
-        # missing company
-
-        try:
-            Company.fetch(object_id=object_id, full=full)
+        if object_id:
             c = Company.get(object_id=object_id, dbsession=dbsession)
-            print("fetched:", c)
-        except AFNoCompany as e:
-            logger.error(e)
+            if oid:
+                print("Refresh data for existing company:", c)
+                c.update_reviews(dbsession=dbsession, full=full)
+                dbsession.commit()
+                return
+
+            # missing company
+            else:
+                try:
+                    Company.fetch(object_id=object_id, full=full)
+                    c = Company.get(object_id=object_id, dbsession=dbsession)
+                    print("fetched:", c)
+                except AFNoCompany as e:
+                    logger.error(e)
+        else:
+            # no object_id, (:all). process region
+            if region_id is None:
+                print("Need either object_id or region_id")
+                return 1
+            
+            stmt = select(Company).where(Company.region_id == region_id)
+            count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
+            for idx,c in enumerate(dbsession.scalars(stmt)):
+                print(f"fetch {idx}/{count} {c}")
+                Company.fetch(c.object_id)
+
+
 
 @company_app.command(name="wipe")
 def сompany_wipe(oid: str, full: bool = typer.Option(False, "--full", help="Wipe full company data")):

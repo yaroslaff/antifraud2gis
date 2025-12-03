@@ -10,6 +10,7 @@ from .basic import run_basic_metrics
 from .neigh import run_neigh_metrics
 from .author import run_author_metrics
 
+
 def save_metrics(c: Company, metrics: dict, dbsession: Session):
 
     print("SAVE METRICS")
@@ -84,7 +85,7 @@ def run_metrics(object_id: str, cdf: pd.DataFrame, adf: pd.DataFrame) -> dict[st
         return metrics
 
     metrics.update(run_neigh_metrics(object_id=object_id, reviews2gis=metrics['reviews:2gis'], adf=adf))
-    metrics.update(run_author_metrics(adf=adf))
+    metrics.update(run_author_metrics(adf=adf, cdf2gis=cdf2gis))
     metrics.update(run_zodiac_metrics(cdf2gis=cdf2gis))
 
     return metrics

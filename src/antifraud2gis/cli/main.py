@@ -22,7 +22,7 @@ from pathlib import Path
 # import sqlite3
 
 import sqlalchemy
-from sqlalchemy import create_engine, select, func, case
+from sqlalchemy import create_engine, select, func, case, desc
 from sqlalchemy.orm import Session
 import typer
 
@@ -145,8 +145,11 @@ def status(substatus: str | None = typer.Argument(None, help="db status (None, r
             )
             total, no_region, region = dbsession.execute(stmt).one()
             print(f"{now:%Y-%m-%d %H:%M}: {total=} {no_region=} {region=}")
+           
     else:
         print(f"Sorry, do not know substatus {substatus!r}", file=sys.stderr)
+
+
 
 def print_full_status():
 

@@ -104,7 +104,8 @@ class Company(Base):
 
 
     @classmethod
-    def get_or_fetch(cls, object_id: str, dbsession, full=True) -> "Company":        
+    def get_or_fetch(cls, object_id: str, dbsession, full=True) -> "Company":
+        """ load company and reviews, full: load all reviews. if no full: short-load 1st review with company data """
         # Try to load from DB
 
         assert object_id is not None
@@ -407,6 +408,8 @@ class Company(Base):
                             .scalar() or 0
 
     def data_reviews(self, provider = None, dbsession = None, days = None):
+        """ All recent (max_review_age) reviews from db. (all providers) """
+
         from .review import Review
 
         # dbsession = dbsession or DBSession()

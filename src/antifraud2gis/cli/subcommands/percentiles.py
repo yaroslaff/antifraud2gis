@@ -17,13 +17,19 @@ from ...exceptions import AFNoCompany
 percentiles_app = typer.Typer(help="Metrics commands")
 
 @percentiles_app.command(name="list")
-def percentiles_list(city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")):
+def percentiles_list(
+        city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
+        region_id: int = typer.Option(None, "-r", "--region", help="region id")):
     """ show percentiles """
 
     with DBSession() as dbsession:
         stmt = dbsession.query(MetricPerc)
+
         if city:
             stmt = stmt.filter(MetricPerc.city == city)
+
+        if region_id:
+            stmt = stmt.filter(MetricPerc.region_id == region_id)
 
         c = stmt.count()
         print(f"# total: {c} metrics")
@@ -33,10 +39,15 @@ def percentiles_list(city: str = typer.Option(None, "-c", "--city", help="Proces
 
 
 @percentiles_app.command(name="run")
-def percentiles_run(city: str = typer.Argument(help="Process only companies from this city")):
+def percentiles_run(
+        # city: str = typer.Argument(help="Process only companies from this city"),
+        region_id: str = typer.Argument(help="region id")
+    ):
     """ calculate percentiles """
 
-    metrics = ['rpa:mean', 'rpa:median']
+    # TODO - region_id filter
+
+    metrics = ['rpa:mean', 'rpa:median', 'private_ratio']
     p_values = [50, 75, 90, 95, 99]
     
 
