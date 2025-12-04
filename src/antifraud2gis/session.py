@@ -18,7 +18,7 @@ from .settings import settings
 #    http_session = requests.Session()
 
 
-def create_retry_session(retries=3, backoff=5, status_forcelist=(403, 429, 500, 502, 503, 504)):
+def create_retry_session(retries=3, backoff=5, status_forcelist=(429, 500, 502, 503, 504)):
     retry = Retry(
         total=retries,
         backoff_factor=backoff,

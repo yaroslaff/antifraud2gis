@@ -20,7 +20,10 @@ class AFCompanyError(AFException):
     pass
 
 class AFAuthorPrivate(AFException):
-    pass
+    def __init__(self, public_id, message=None):
+        self.public_id = public_id
+        super().__init__(message or f"Author {public_id} is private")
+
 
 class AFAuthorUnavailable(AFException):
     # 500 from 2gis. e.g. 412846e8aca14251bb470de8bb4578ac

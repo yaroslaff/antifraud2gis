@@ -3,7 +3,7 @@ from ..session import http_session
 from loguru import logger
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
 from ..session import http_session
-from ..exceptions import AFAuthorUnavailable, AFNetworkProblem
+from ..exceptions import AFAuthorUnavailable, AFAuthorPrivate
 import requests
 
 import time
@@ -51,17 +51,14 @@ class AuthorReviewsIterator:
                 # time.sleep(2)
                 pass
             r = http_session.get(self.url, timeout=self.timeout)
-            # print(f"result: {r.status_code} {len(r.text)}")
         except (requests.exceptions.RetryError, requests.exceptions.ConnectionError) as e:
             logger.error(f"Cannot get reviews for {self.public_id} from {self.url}")
             raise AFAuthorUnavailable
-
+        
         if r.status_code == 403:
-            logger.debug(f"404 but profile {self.public_id} is private. We should not get here.") 
-            # it's possible sometimes
-            raise NotImplementedError
+            raise AFAuthorPrivate(public_id=self.public_id)
 
-        elif r.status_code in [400, 500, 404]:
+        if r.status_code in [400, 403, 500, 404]:
             logger.warning(f"user {self.public_id} reviews error {r.status_code} url: {self.url}")
             raise StopIteration
         else:

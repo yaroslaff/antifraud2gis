@@ -256,16 +256,16 @@ class Company(Base):
                                     u = Author.fetch(public_id=public_id, seen=object_id)
                                     u = author_dbsession.merge(u)
                                     if u.private:
-                                        print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
+                                        # print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
+                                        pass
                                 else:
-                                    print(f"c: {object_id}: update author: {public_id}")
+                                    # print(f"c: {object_id}: update author: {public_id}")
                                     if not u.private:
                                         df = u.update_reviews(dbsession=author_dbsession)
                                 
                                 if u.private:
                                     # save review anyway
                                     if not Review.exists_in_db(r['id'], author_dbsession):
-                                        print("save private review anyway")
                                         _review = Review(
                                             id=r['id'],
                                             author=u,
@@ -277,7 +277,8 @@ class Company(Base):
                                         )
                                         author_dbsession.add(_review)
                                     else:
-                                        print("Private review already in DB:", r['id'])
+                                        # print("Private review already in DB:", r['id'])
+                                        pass
 
 
                                 author_dbsession.commit()

@@ -108,13 +108,21 @@ class Author(Base):
 
         return data['public_user']['privacy'] == 'CLOSE'
 
+
     @classmethod
-    def fetch_base(cls, public_id: str, seen: str, dbsession) -> 'Author':
+    def fetch_base(cls, public_id: str) -> dict:
         base_url = f'https://api.auth.2gis.com/public-profile/user/{public_id}?with_friend_info=false'
         r = http_session.get(base_url)
         r.raise_for_status()
 
         data = r.json()
+        return data
+
+
+    @classmethod
+    def fetch_save_base(cls, public_id: str, seen: str, dbsession) -> 'Author':
+
+        data = cls.fetch_base(public_id=public_id)
 
         private = data['public_user']['privacy'] == 'CLOSE'
 
@@ -151,52 +159,58 @@ class Author(Base):
         # fetch reviews from network and update self.reviews
         ar = AuthorReviewsIterator(public_id=self.public_id, timeout=60)
 
-        for review_data in ar:            
-            # save company (if needed)
-            obj = review_data['object']
+        try:
+            for review_data in ar:            
+                # save company (if needed)
+                obj = review_data['object']
 
-            if obj['type'] != 'branch':
-                # we process only companies type=branch
-                # skip types: attraction adm_div
-                continue
+                if obj['type'] != 'branch':
+                    # we process only companies type=branch
+                    # skip types: attraction adm_div
+                    continue
 
-            _company = dbsession.get(Company, obj['id'])
-            if _company is None:
-                city, address = split_addr(obj['address'])
+                _company = dbsession.get(Company, obj['id'])
+                if _company is None:
+                    city, address = split_addr(obj['address'])
 
-                if True:
-                    # normal company may have no address, e.g. 70000001083275091
-                    _company = Company(
-                        object_id=obj['id'], 
-                        region_id=review_data['region_id'], 
-                        title=obj['name'], 
-                        city=city, 
-                        address=address,
-                        seen = self.public_id)
-                    _company.update_search_str()
-                    dbsession.add(_company)
-                    dbsession.commit()
+                    if True:
+                        # normal company may have no address, e.g. 70000001083275091
+                        _company = Company(
+                            object_id=obj['id'], 
+                            region_id=review_data['region_id'], 
+                            title=obj['name'], 
+                            city=city, 
+                            address=address,
+                            seen = self.public_id)
+                        _company.update_search_str()
+                        dbsession.add(_company)
+                        dbsession.commit()
 
-            # check if review already exists
-            _review = dbsession.get(Review, review_data['id'])
-            if _review is not None:
-                continue
+                # check if review already exists
+                _review = dbsession.get(Review, review_data['id'])
+                if _review is not None:
+                    continue
 
-            if not Review.exists_in_db(review_data['id'], dbsession):
-                # save review
-                _review = Review(
-                    id=review_data['id'],
-                    author=self,
-                    _name=None, # name will be takes from _user.name
-                    company=_company,
-                    provider=review_data['provider'],
-                    rating=review_data['rating'],
-                    created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
-                )
-                dbsession.add(_review)
-            else:
-                print("Review already in DB:", review_data['id'])
-    
+                if not Review.exists_in_db(review_data['id'], dbsession):
+                    # save review
+                    _review = Review(
+                        id=review_data['id'],
+                        author=self,
+                        _name=None, # name will be takes from _user.name
+                        company=_company,
+                        provider=review_data['provider'],
+                        rating=review_data['rating'],
+                        created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
+                    )
+                    dbsession.add(_review)
+                else:
+                    print("Review already in DB:", review_data['id'])
+        except AFAuthorPrivate as e:
+            data = Author.fetch_base(self.public_id)
+            private = data['public_user']['privacy'] == 'CLOSE'
+            if private:
+                print("set private for", self.public_id)
+                self.private = True
 
             # dbsession.commit()
 
@@ -209,11 +223,11 @@ class Author(Base):
             _author = None
 
             # get base info for user
-            _author = cls.fetch_base(public_id=public_id, seen=seen, dbsession=dbsession)
+            _author = cls.fetch_save_base(public_id=public_id, seen=seen, dbsession=dbsession)
 
             if _author.private:
                 # do not fetch reviews if user has private profile
-                print(f"Private profile {_author.public_id}, no reviews fetched")
+                # print(f"Private profile {_author.public_id}, no reviews fetched")
                 return _author
             
             try:

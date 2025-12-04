@@ -11,7 +11,7 @@ import sys
 from ...models.author import Author
 from ...db import DBSession
 from ...net.author_reviews import AuthorReviewsIterator
-
+from ...exceptions import AFAuthorPrivate
 
 author_app = typer.Typer(help="Author commands")
 
@@ -139,16 +139,20 @@ def reviews_net(
     brief: bool = typer.Option(False, "--brief", "-b", help="brief")):
     """ show reviews for author """
     ar = AuthorReviewsIterator(public_id=public_id)
-    for r in ar:
+    try:
+        for r in ar:
 
-        if oid and r['object']['id'] != oid:
-            # print(f"Skip review for {r['object']['id']}")
-            continue
+            if oid and r['object']['id'] != oid:
+                # print(f"Skip review for {r['object']['id']}")
+                continue
 
-        if brief:
-            print(f"{dateutil.parser.parse(r['date_created']).date()} {r['object']['id']} ({r['object']['address'].split(',')[0]}) {r['object']['name']} {r['rating']}")  
-        else:
-            print_json(data=r)
+            if brief:
+                print(f"{dateutil.parser.parse(r['date_created']).date()} {r['object']['id']} ({r['object']['address'].split(',')[0]}) {r['object']['name']} {r['rating']}")  
+            else:
+                print_json(data=r)
+
+    except AFAuthorPrivate as e:
+        print(f"Got exception: {e.__class__.__name__} {e}")
 
 @author_app.command(name="reviews-data")
 def reviews_data(public_id: str):

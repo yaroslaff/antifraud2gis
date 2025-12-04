@@ -5,6 +5,7 @@ from rich.console import Console
 import dateutil
 import pandas as pd
 import sys
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select, func, and_
 
@@ -14,6 +15,7 @@ from ...aliases import resolve_alias
 from ...net.company_reviews import CompanyReviewsIterator
 from ...logger import logger
 from ...exceptions import AFNoCompany
+from ...settings import settings
 
 company_app = typer.Typer(help="Company commands")
 
@@ -133,12 +135,36 @@ def сompany_authors(oid: str):
         for r in c.authors():
             print(r)
 
+@company_app.command(name="trace")
+def сompany_trace(oid: str = typer.Argument(None, help="object_id")):
+    with DBSession() as dbsession:
+        object_id = resolve_alias(oid)
+
+        while object_id:
+            print("obj:", object_id)
+            c = Company.get(object_id=object_id, dbsession=dbsession)
+            print(f"# {c.info()}")
+            a = Author.get(public_id=c.seen, dbsession=dbsession)
+            print(f"# {a}")
+            if a is None:
+                return
+            print("seen:", a.seen)
+            object_id = a.seen
+
+
+
+
 @company_app.command(name="fetch")
 def сompany_fetch(oid: str = typer.Argument(None, help="object_id"), 
                 full: bool = typer.Option(False, "--full", "-f", help="Fetch full company data"),
+                update: bool = typer.Option(False, "--update", "-u", help="Update companies (even companies which has updated_at)"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")):
 
     object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=settings.max_review_age)
+
+
     with DBSession() as dbsession:
 
         if object_id:
@@ -150,9 +176,9 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                 return
 
             # missing company
-            else:
+            else:                
                 try:
-                    Company.fetch(object_id=object_id, full=full)
+                    Company.fetch(object_id=object_id, full=full, notolder=cutoff)
                     c = Company.get(object_id=object_id, dbsession=dbsession)
                     print("fetched:", c)
                 except AFNoCompany as e:
@@ -164,15 +190,30 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                 print("Need either object_id or region_id")
                 return 1
             
-            stmt = select(Company).where(Company.region_id == region_id)
+            stmt = select(Company).where(Company.region_id == region_id, Company.error.is_(None))
+
+            if not update:
+                stmt = stmt.where(Company.updated_at.is_(None))
+
+            print(stmt)
+
             count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
+            
             for idx,c in enumerate(dbsession.scalars(stmt)):
                 print(f"fetch {idx}/{count} {c}")
-                try:
-                    Company.fetch(c.object_id, full=full)
-                except AFNoCompany as e:
-                    logger.error(e)
-                    c.error = str(e)
+                with DBSession() as dbsession2:
+                    try:
+                        Company.fetch(c.object_id, full=full, notolder=cutoff)
+                    except AFNoCompany as e:
+                        logger.error(e)
+                        c = dbsession2.merge(c)
+                        c.error = str(e)
+                    except KeyboardInterrupt as e:
+                        print("KeyboardInterrupt", e)
+                        sys.exit(1)
+                    
+                    dbsession2.commit()
+    
 
         print("commit")
         dbsession.commit()
