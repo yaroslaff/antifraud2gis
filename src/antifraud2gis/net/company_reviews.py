@@ -4,6 +4,8 @@ from ..session import http_session
 import requests
 import time
 
+WARN_TIME = 60
+
 class CompanyReviewsIterator:
     def __init__(self, object_id: str, timeout=None):
         self.object_id = object_id
@@ -12,6 +14,7 @@ class CompanyReviewsIterator:
         self.pages_loaded = 0 # increased only for page with 1+ reviews
         self.meta = None
         self._reviews = []
+        self.created = time.time()
 
     def __iter__(self):
         return self
@@ -26,6 +29,9 @@ class CompanyReviewsIterator:
         return self._reviews.pop(0)
 
     def _load_next_page(self):
+
+        if time.time() > self.created + WARN_TIME:
+            print(f"CRI for {self.object_id} runs for: {int(time.time() - self.created)}")
 
         r = None
         while r is None:

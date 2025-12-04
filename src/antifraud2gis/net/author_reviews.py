@@ -9,6 +9,7 @@ import requests
 import time
 from rich import print_json
 
+WARN_TIME = 60
 
 class AuthorReviewsIterator:
     def __init__(self, public_id: str, timeout=None):
@@ -18,6 +19,7 @@ class AuthorReviewsIterator:
         self.meta = None
         self.timeout = timeout
         self._reviews = []
+        self.created = time.time()
 
     def __iter__(self):
         return self
@@ -34,6 +36,9 @@ class AuthorReviewsIterator:
                     pass
 
     def _load_next_page(self):
+
+        if time.time() > self.created + WARN_TIME:
+            print(f"ARI for {self.public_id} runs for: {int(time.time() - self.created)}")
 
         if self.url is None:
             raise StopIteration

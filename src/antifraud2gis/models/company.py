@@ -258,7 +258,7 @@ class Company(Base):
                                     if u.private:
                                         print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
                                 else:
-                                    print(f"existing author: {public_id} pvt: {u.private} (update)")
+                                    print(f"c: {object_id}: update author: {public_id}")
                                     if not u.private:
                                         df = u.update_reviews(dbsession=author_dbsession)
                                 
