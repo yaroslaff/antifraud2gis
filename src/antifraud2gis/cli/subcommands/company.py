@@ -6,6 +6,9 @@ import dateutil
 import pandas as pd
 import sys
 from datetime import datetime, timedelta, timezone
+import evalidate
+from enum import Enum
+import json
 
 from sqlalchemy import select, func, and_
 
@@ -16,6 +19,10 @@ from ...net.company_reviews import CompanyReviewsIterator
 from ...logger import logger
 from ...exceptions import AFNoCompany
 from ...settings import settings
+
+class SeenLoop(Exception):
+    pass
+
 
 company_app = typer.Typer(help="Company commands")
 
@@ -135,22 +142,143 @@ def сompany_authors(oid: str):
         for r in c.authors():
             print(r)
 
-@company_app.command(name="trace")
-def сompany_trace(oid: str = typer.Argument(None, help="object_id")):
-    with DBSession() as dbsession:
-        object_id = resolve_alias(oid)
+def trace_company(object_id: str):
+    seen_set = set()
 
+    with DBSession() as dbsession:
         while object_id:
             print("obj:", object_id)
             c = Company.get(object_id=object_id, dbsession=dbsession)
+
+            if c is None:
+                print(f"### NULL c {object_id}")
+                raise SeenLoop
+
             print(f"# {c.info()}")
+            if c.seen in seen_set:
+                print(f"### LOOP: c {c.seen} already seen!")
+                raise SeenLoop
+            
+            seen_set.add(c.seen)
+
             a = Author.get(public_id=c.seen, dbsession=dbsession)
-            print(f"# {a}")
             if a is None:
                 return
+            print(f"# {a}")
+            if a.seen in seen_set:
+                print(f"{a.seen} already seen!")
+                print(f"### LOOP: a {a.seen} already seen!")
+                raise SeenLoop
+            seen_set.add(a.seen)
+
             print("seen:", a.seen)
             object_id = a.seen
 
+@company_app.command(name="trace")
+def сompany_trace(oid: str = typer.Argument(None, help="object_id")):
+    
+    object_id = resolve_alias(oid) if oid and oid.lower() != ":all" else None
+
+    if object_id:
+        try:
+            trace_company(object_id=object_id)
+        except SeenLoop:
+            print(f"### SEENLOOP: {object_id}")
+
+    else:
+        with DBSession() as dbsession:
+            # loop over all companies
+            stmt = select(Company)
+            count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))        
+            for idx, c in enumerate(dbsession.scalars(stmt)):
+                print(f"# {idx} / {count} {c}")
+                try:
+                    trace_company(object_id=c.object_id)
+                except SeenLoop:
+                    print(f"### SEENLOOP: {object_id}")
+                print()
+
+
+
+class ListOutputFormat(Enum):
+    full = "full"
+    brief = "brief"
+    json = "json"
+    
+
+@company_app.command(name="list")
+def сompany_list(
+                fmt: ListOutputFormat = typer.Option(ListOutputFormat.full, "--fmt", "-f", help="Output format: (full*/brief/json)"),
+                filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),                
+                region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
+                error: bool = typer.Option(None, "-e", "--error", help="Process only error companies"),
+                ok: bool = typer.Option(None, "-k", "--ok", help="Process only ok companies"),
+                sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")
+                ):
+    """ list company's object_ids """
+
+
+    stmt = select(Company)
+
+    if region_id is not None:
+        stmt = stmt.where(Company.region_id == region_id)
+
+    if ok:
+        stmt = stmt.where(Company.error.is_(None))
+    
+    if error:
+        stmt = stmt.where(Company.error.isnot(None))
+
+
+    total = 0
+    printed = 0
+    skipped = 0
+    count = None
+    expr: evalidate.Expr | None = None
+    filtered = list()
+
+    model = evalidate.mult_eval_model.clone()
+    model.nodes.extend(['Call', 'Attribute'])    
+    model.attributes.extend(['lower', 'upper'])
+
+    if filter_expr:
+        try:
+            expr = evalidate.Expr(expr=filter_expr, model=model)
+        except evalidate.ValidationException as e:
+            print(e)
+            return 1
+
+    with DBSession() as dbsession:
+        if sum_:
+            count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
+        
+        for c in dbsession.scalars(stmt):
+
+            total+=1
+
+            if expr:
+                # filter
+                if not expr.eval(c.to_dict()):
+                    skipped += 1
+                    continue
+
+
+            printed += 1
+
+
+            if fmt == ListOutputFormat.brief:
+                print(c.object_id)
+            elif fmt == ListOutputFormat.full:
+                print(c)
+            else:
+                # json
+                filtered.append(c.to_dict())
+
+        if fmt == ListOutputFormat.json:
+            print(json.dumps(filtered, indent=4))
+
+        if sum_:
+            print(f"# SQL count: {count} (printed:{printed} + skipped:{skipped} = {total})")
 
 
 
@@ -169,8 +297,14 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
 
         if object_id:
             c = Company.get(object_id=object_id, dbsession=dbsession)
-            if oid:
-                print("Refresh data for existing company:", c)
+            if c:
+
+                if c.updated_at:
+                    verb = "Refresh"
+                else:
+                    verb = "Fetch"
+
+                print(f"{verb} data for existing company:", c)
                 c.update_reviews(dbsession=dbsession, full=full)
                 dbsession.commit()
                 return
@@ -180,10 +314,15 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                 try:
                     Company.fetch(object_id=object_id, full=full, notolder=cutoff)
                     c = Company.get(object_id=object_id, dbsession=dbsession)
-                    print("fetched:", c)
                 except AFNoCompany as e:
+                    print(e)
                     logger.error(e)
-                    c.error = str(e)                    
+                    if c:
+                        c.error = str(e)
+                    else:
+                        print("set emptyerr record")
+                        Company.emptyerr(object_id=object_id, err=str(e))
+                        
         else:
             # no object_id, (:all). process region
             if region_id is None:
@@ -194,8 +333,6 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
 
             if not update:
                 stmt = stmt.where(Company.updated_at.is_(None))
-
-            print(stmt)
 
             count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
             

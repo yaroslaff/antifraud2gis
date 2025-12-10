@@ -4,7 +4,7 @@ from ..session import http_session
 import requests
 import time
 
-WARN_TIME = 60
+WARN_TIME = 300
 
 class CompanyReviewsIterator:
     def __init__(self, object_id: str, timeout=None):

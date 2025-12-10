@@ -23,14 +23,15 @@ dependencies = [
     "python-dateutil",
     "ipython",
     "pandas",
-    "numpy"
+    "numpy",
+    "evalidate"
     ]
 requires-python = ">=3.8"
 authors = [{ name = "Yaroslav Polyakov", email = "yaroslaff@gmail.com" }]
 
 [project.urls]
-Homepage = "https://github.com/yaroslaff/scrape2gis"
-Repository = "https://github.com/yaroslaff/scrape2gis"
+Homepage = "https://github.com/yaroslaff/antifraud2gis"
+Repository = "https://github.com/yaroslaff/antifraud2gis"
 
 
 [project.scripts]

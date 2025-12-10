@@ -85,12 +85,14 @@ def arg_aliases():
     aa.alias("q" , "queue")
 
     aa.alias("c" , "company")
+    aa.alias("cl", ["company", "list"])
     aa.alias("ca", ["company", "authors"])
     aa.alias("cr", ["company", "reviews"])
     aa.alias("crn", ["company", "reviews-net"])
     aa.alias("crd", ["company", "reviews-data"])
     aa.alias("cf", ["company", "fetch"])
     aa.alias("cw", ["company", "wipe"])
+    aa.alias("ct", ["company", "trace"])
 
 
     aa.alias("a", "author")

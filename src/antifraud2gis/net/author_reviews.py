@@ -9,7 +9,7 @@ import requests
 import time
 from rich import print_json
 
-WARN_TIME = 60
+WARN_TIME = 300
 
 class AuthorReviewsIterator:
     def __init__(self, public_id: str, timeout=None):

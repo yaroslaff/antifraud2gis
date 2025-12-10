@@ -113,7 +113,7 @@ def fix_region_id_author(public_id: str, dbsession: Session):
 def fix_seen1(
     limit: int = typer.Option(100, "--limit", "-l", help="Number of authors to process"),
     ):
-    """ Fix region ID """
+    """ Set author.seen """
     
     started = time.time()
     fixed = 0
@@ -136,6 +136,9 @@ def fix_seen1(
             for c,r,a in res:
                 print(f"{r.created.date()} {c.object_id} {c.title} {a.public_id} {a.name} [seen:{a.seen}]")
                 if a.seen is None:
+
+                    assert a.public_id != c.seen
+
                     a.seen = c.object_id
                     iter_fixed += 1
                     fixed += 1
@@ -153,7 +156,7 @@ def fix_seen1(
 def fix_seen2(
     limit: int = typer.Option(100, "--limit", "-l", help="Number of authors to process"),
     ):
-    """ Fix region ID """
+    """ Set company seen """
     
     started = time.time()
     fixed = 0
@@ -179,6 +182,9 @@ def fix_seen2(
             for a,r,c in res:
                 print(f"{r.created.date()} {a.public_id} ({a.name}) {a.seen}: {c.object_id} {c.title} [seen:{c.seen}]")
                 if c.seen is None:
+
+                    assert c.object_id != a.seen
+
                     c.seen = a.public_id
                     iter_fixed += 1
                     fixed +=1

@@ -61,9 +61,6 @@ class Company(Base):
     error: Mapped[str | None] = mapped_column(String, nullable=True)
     search_str: Mapped[str] = mapped_column(String, nullable=False)
     seen: Mapped[str] = mapped_column(String, nullable=True)
-
-
-
     # datetime of full load (or last update)
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=None, nullable=True)
 
@@ -71,9 +68,8 @@ class Company(Base):
     branch_count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
     rating_2gis: Mapped[float] = mapped_column(Float, nullable=True)
 
-    region_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    region_id: Mapped[int] = mapped_column(Integer, nullable=False) # -1 - tmp error code, -2 - no reviews -3 emptyerr (medical)
 
-    metrics_calculated: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)
 
     reviews: Mapped[list["Review"]] = relationship(back_populates="company", cascade="all, delete-orphan",
         order_by="Review.created.desc()")
@@ -151,12 +147,14 @@ class Company(Base):
         if city:
             base_query = base_query.where(cls.city == city)
 
-        cnt_stmt = base_query.with_only_columns(func.count()).order_by(None)
+        cnt_stmt = base_query.with_only_columns(func.count()).order_by(None)        
+
         cnt = dbsession.scalar(cnt_stmt)        
 
         offset = randint(0, min(cnt, 10000))
         stmt = base_query.order_by(cls.object_id).offset(offset).limit(1)
         result = dbsession.scalar(stmt)
+
         return result
 
     @classmethod
@@ -254,6 +252,7 @@ class Company(Base):
                                 u = Author.get(public_id=public_id, dbsession=author_dbsession)
                                 if u is None:
                                     u = Author.fetch(public_id=public_id, seen=object_id)
+
                                     u = author_dbsession.merge(u)
                                     if u.private:
                                         # print(f"private profile: {public_id}, no reviews fetched in Author.fetch")
@@ -308,7 +307,7 @@ class Company(Base):
 
             # loaded all pages
             company = dbsession.get(cls, object_id)
-            if company is None:           
+            if company is None:
                 raise AFNoCompany(f"Total: {stats_reviews}, pub 2gis profiles: {stats_public_2gis} private profiles: {stats_private}")
 
             if ext_reviews:
@@ -500,3 +499,24 @@ class Company(Base):
         """ return True if company is normal (=symmetric), reviews are visible both in company and in author view """
         pass
     
+    @classmethod
+    def emptyerr(cls, object_id: str, err: str, title='<err:notitle>', city='<err:nowhere>'):
+        _company = Company(
+            object_id=object_id, 
+            region_id=-3,
+            title=title,
+            city=city,
+            address=None,
+            error=err,
+            seen = None)
+        _company.update_search_str()
+
+        with DBSession() as dbsession:
+            dbsession.merge(_company)
+            dbsession.commit()        
+
+    def to_dict(self):
+        return {
+            c.name: (v.strftime("%Y/%m/%d") if isinstance(v := getattr(self, c.name), datetime) else v)
+            for c in self.__table__.columns
+        }
