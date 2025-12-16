@@ -188,9 +188,11 @@ class Company(Base):
     @classmethod
     def fetch(cls, object_id: str, full=False, notolder: datetime | None = None) -> None:
 
+        
+
         from .review import Review
         # dbsession = dbsession or DBSession()
-        # print(f"FETCH {object_id} full: {full} caller: {caller()}")
+        # print(f"FETCH {object_id} full: {full} notolder: {notolder} caller: {caller()}")
 
         with DBSession() as dbsession:
 
@@ -485,13 +487,16 @@ class Company(Base):
     def update_reviews(self, dbsession: Session, full: bool = False) -> None:
         """ load new reviews from network """
         print(f"Update reviews for company {self.object_id}")
-        if full:
+        if full or self.updated_at is None:            
             newest = None
         else:
             newest = self.newest_review_db(dbsession=dbsession)
             # print("NEWEST:",newest, "tz:", newest.tzinfo) 
         try:
             Company.fetch(object_id=self.object_id, full=True, notolder=newest)
+            if self.updated_at is None:
+                self.updated_at = datetime.now(tz=timezone.utc).replace(microsecond=0)
+
         except AFNoCompany as e:
             self.error = str(e)
 

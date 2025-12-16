@@ -3,6 +3,7 @@ from ..session import http_session
 
 import requests
 import time
+import json
 
 WARN_TIME = 300
 
@@ -29,7 +30,6 @@ class CompanyReviewsIterator:
         return self._reviews.pop(0)
 
     def _load_next_page(self):
-
         if time.time() > self.created + WARN_TIME:
             print(f"CRI for {self.object_id} runs for: {int(time.time() - self.created)}")
 
@@ -41,7 +41,7 @@ class CompanyReviewsIterator:
             except requests.RequestException as e:
                 print("RequestException", e)
                 time.sleep(1)
-                
+
         if r.status_code == 400:
             raise NotImplementedError
 

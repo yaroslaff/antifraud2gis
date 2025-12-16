@@ -244,7 +244,7 @@ def сompany_list(
     if filter_expr:
         try:
             expr = evalidate.Expr(expr=filter_expr, model=model)
-        except evalidate.ValidationException as e:
+        except (evalidate.ValidationException, evalidate.CompilationException)  as e:
             print(e)
             return 1
 
@@ -258,9 +258,13 @@ def сompany_list(
 
             if expr:
                 # filter
-                if not expr.eval(c.to_dict()):
-                    skipped += 1
-                    continue
+                try:
+                    if not expr.eval(c.to_dict()):
+                        skipped += 1
+                        continue
+                except evalidate.ExecutionException as e:
+                    print(e, file=sys.stderr)
+                    sys.exit(1)
 
 
             printed += 1
@@ -303,9 +307,16 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                     verb = "Refresh"
                 else:
                     verb = "Fetch"
+                
+                old_updated = c.updated_at
 
-                print(f"{verb} data for existing company:", c)
+                old_nr = c.nreviews()
+                print(f"{verb} data for existing company {c.object_id}: {c.title}  reviews:{old_nr}")
                 c.update_reviews(dbsession=dbsession, full=full)
+
+                errstr = f"ERR: {c.error}" if c.error else ''
+
+                print(f"nreviews: {old_nr} => {c.nreviews()} update: {old_updated} => {c.updated_at}  {errstr} after fetch (update)")
                 dbsession.commit()
                 return
 
