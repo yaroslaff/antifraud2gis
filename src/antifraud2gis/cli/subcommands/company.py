@@ -105,6 +105,7 @@ def сompany_reviews_data(oid: str = typer.Argument(..., help="2GIS object_id"))
 def сompany_reviews_net(
     oid: str,
     public_id: str = typer.Argument(None, help="Dump only this review"),
+    sleep: int = typer.Option(None, "-s", help="Sleep N seconds after each page"),
     datestr: str = typer.Option(
         None,
         "-d",
@@ -115,7 +116,7 @@ def сompany_reviews_net(
     """ get reviews from network and dump it (crn) """
 
     object_id = resolve_alias(oid)    
-    cr = CompanyReviewsIterator(object_id=object_id)
+    cr = CompanyReviewsIterator(object_id=object_id, sleep=sleep)
     needle_date = None
 
     if datestr:

@@ -180,7 +180,7 @@ def metrics_run_code(c: Company):
 
 @metrics_app.command(name="run")
 def metrics_run(
-    oid: str = typer.Argument(..., help="2GIS object_id or :all"),
+    oid: str = typer.Argument(":all", help="2GIS object_id or :all"),
     city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
     region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")
     ):
