@@ -520,8 +520,13 @@ class Company(Base):
             dbsession.merge(_company)
             dbsession.commit()        
 
-    def to_dict(self):
-        return {
+    def to_dict(self, nreviews=False):
+        d = {
             c.name: (v.strftime("%Y/%m/%d") if isinstance(v := getattr(self, c.name), datetime) else v)
             for c in self.__table__.columns
         }
+
+        if nreviews:
+            d['nreviews'] = self.nreviews()
+        return d
+

@@ -209,11 +209,13 @@ class ListOutputFormat(Enum):
 
 @company_app.command(name="list")
 def сompany_list(
+                needle: str = typer.Argument(None, help="search needle in object_id/title/address"),
                 fmt: ListOutputFormat = typer.Option(ListOutputFormat.full, "--fmt", "-f", help="Output format: (full*/brief/json)"),
-                filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),                
+                filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
                 error: bool = typer.Option(None, "-e", "--error", help="Process only error companies"),
                 ok: bool = typer.Option(None, "-k", "--ok", help="Process only ok companies"),
+                nr: bool = typer.Option(False, "--nr", help="count nreviews"),
                 sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")
                 ):
     """ list company's object_ids """
@@ -229,6 +231,12 @@ def сompany_list(
     
     if error:
         stmt = stmt.where(Company.error.isnot(None))
+
+    if needle:
+        needle_like = f"%{needle.lower()}%"
+        stmt = stmt.where(
+                func.lower(Company.search_str).like(needle_like),
+        )
 
 
     total = 0
@@ -260,24 +268,23 @@ def сompany_list(
             if expr:
                 # filter
                 try:
-                    if not expr.eval(c.to_dict()):
+                    if not expr.eval(c.to_dict(nreviews=nr)):
                         skipped += 1
                         continue
                 except evalidate.ExecutionException as e:
                     print(e, file=sys.stderr)
                     sys.exit(1)
 
-
             printed += 1
-
 
             if fmt == ListOutputFormat.brief:
                 print(c.object_id)
-            elif fmt == ListOutputFormat.full:
-                print(c)
+            elif fmt == ListOutputFormat.full:                
+                nrstr = f'NR:{c.nreviews()}' if nr else ''
+                print(f'{c.object_id} ({c.rating_2gis}) r{c.region_id} {c.title} {nrstr}')
             else:
                 # json
-                filtered.append(c.to_dict())
+                filtered.append(c.to_dict(nreviews=nr))
 
         if fmt == ListOutputFormat.json:
             print(json.dumps(filtered, indent=4))

@@ -10,10 +10,19 @@ from .basic import run_basic_metrics
 from .neigh import run_neigh_metrics
 from .author import run_author_metrics
 
+# too high value => suspicious
+metrics_high = ['private_ratio', 'external_ratio']
+# too low value => suspicious
+metrics_low = ['rpa:mean', 'rpa:median']
+
+
+metrics_all = metrics_high + metrics_low
+
+percentiles_values = [50, 75, 90, 95, 99]
+
+
 
 def save_metrics(c: Company, metrics: dict, dbsession: Session):
-
-    print("SAVE METRICS")
 
     for metric_name, value in metrics.items():
 
@@ -27,7 +36,7 @@ def save_metrics(c: Company, metrics: dict, dbsession: Session):
     c.metrics_calculated = datetime.datetime.now()
     c.metrics_signature = settings.param_fp()
     
-    dbsession.add(c)
+    ### dbsession.add(c)
     dbsession.commit()
 
 

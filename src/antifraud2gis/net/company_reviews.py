@@ -42,7 +42,7 @@ class CompanyReviewsIterator:
         r = None
         while r is None:
 
-            try:                    
+            try:
                 r = http_session.get(self.url, timeout=self.timeout)
             except requests.RequestException as e:
                 print("RequestException", e)

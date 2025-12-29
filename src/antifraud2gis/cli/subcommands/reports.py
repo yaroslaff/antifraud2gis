@@ -4,7 +4,7 @@ from sqlalchemy import select, func, case, desc
 
 from rich.console import Console
 from rich.table import Table
-
+from rich import print
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
@@ -12,7 +12,8 @@ from ...models.metricperc import MetricPerc
 from ...models.company import Company
 from ...models.author import Author
 from ...aliases import resolve_alias
-from ...metrics import run_metrics, save_metrics
+from ...metrics import run_metrics, save_metrics, metrics_all, metrics_high, metrics_low
+from ...metrics.fraudreport import FraudReport
 from ...logger import logger
 from ...exceptions import AFNoCompany
 
@@ -21,25 +22,59 @@ reports_app = typer.Typer(help="Reports commands")
 
 
 @reports_app.command(name="fraud")
-def reports_fraud(oid: str = typer.Argument(None, help="object_id"),):
+def reports_fraud(
+    oid: str = typer.Argument(None, help="object_id"),
+    ):
     """ analyse fraud metrics """
+   
 
-    metric_list = [ 'rpa:mean', 'rpa:median']
+    object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
+    if object_id is None:
+        return
+    
+    with DBSession() as dbsession:
+        c = Company.get(object_id, dbsession=dbsession)
+        fr = FraudReport(c, control_region_id=1, dbsession=dbsession)
+        fr.dump()
+
+
+def old_reports_fraud(
+    oid: str = typer.Argument(None, help="object_id"),
+    region_id: int | None = typer.Option(None, "-r", help="region_id or nothing"),
+    verbose: bool = typer.Option(False, "-v", "--verbose", help="Verbose mode")
+    ):
+    """ analyse fraud metrics """
+    
 
     object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
     if object_id:
         print("Object ID:", object_id)
     else:
         print("All companies")
+    
     with DBSession() as dbsession:
         c = Company.get(object_id, dbsession=dbsession)
+
+        if region_id is None:            
+            region_id = c.region_id 
+        else:
+            print(f"Force use of region_id: {region_id}")
+
+        
         if not c:
             raise AFNoCompany(f"Company {object_id} not found")
         
         print("Report for company:", c)
 
+        if MetricPerc.need_recalculate(c.region_id, dbsession):
+                print("Recalculating percentiles...")
+                with DBSession() as dbsession2:
+                    MetricPerc.recalculate(c.region_id, dbsession2)
+                    dbsession2.commit()
+        
+
         print("analyse fraud metrics...")
-        for metric in metric_list:
+        for metric in metrics_all:
             stars_hit = 0
             stars_total = 0
 
@@ -47,21 +82,30 @@ def reports_fraud(oid: str = typer.Argument(None, help="object_id"),):
             if not m or m.value is None:
                 print(f"  Metric {metric} not found or has no value")
                 continue
-            print(f"  Metric {metric} = {m.value}")
+            # print(f"  Metric {metric} = {m.value}")
 
             # get percentiles for city
             for mp in dbsession.query(MetricPerc).filter(
-                MetricPerc.city == c.city,
+                MetricPerc.region_id == region_id,
                 MetricPerc.name == metric,
             ).all():
                 stars_total += 1
+                if verbose:
+                    print(f"... {mp}")
 
-                if m.value > mp.value:
-                    print(f"    [bold red]FRAUD ALERT![/bold red] Metric {metric}={m.value} > {mp.p}% percentile {mp.value}")
-                    stars_hit += 1
+                if metric in metrics_high:
+                    # normal, high metric
+                    if m.value > mp.value:
+                        if verbose:
+                            print(f"    [bold red]FRAUD ALERT![/bold red] Metric {metric}={m.value} > {mp.p}% percentile {mp.value}")
+                        stars_hit += 1
                 else:
-                    # print(f"    OK. Metric {metric}={m.value} <= {mp.p}% percentile {mp.value}")
-                    pass
+                    # low metric
+                    # normal, high metric
+                    if m.value < mp.value:
+                        if verbose:
+                            print(f"    [bold red]FRAUD ALERT![/bold red] Metric {metric}={m.value} < {mp.p}% percentile {mp.value}")
+                        stars_hit += 1
 
             print(f"  {metric} ({m.value}): {stars_hit}/{stars_total} stars hit")
 

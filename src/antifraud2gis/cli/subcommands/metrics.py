@@ -11,7 +11,7 @@ from ...models.company import Company
 from ...models.author import Author
 from ...models.authormetric import AuthorMetric
 from ...aliases import resolve_alias
-from ...metrics import run_metrics, save_metrics
+from ...metrics import run_metrics, save_metrics, metrics_all, metrics_high, metrics_low, percentiles_values
 from ...logger import logger
 from ...exceptions import AFNoCompany
 
@@ -21,17 +21,20 @@ metrics_app = typer.Typer(help="Metrics commands")
 
 @metrics_app.command(name="top")
 def metrics_top(metric: str = typer.Argument(None, help="metric name"),
-                city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
-                reverse: bool = typer.Option(False, "-r", "--reverse", help="Sort in reverse order", is_flag=True)):
+                region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
+                city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")):
     """ show metrics """
 
     with DBSession() as dbsession:
         stmt = dbsession.query(Metric).filter(Metric.name == metric)
 
+        if region_id:
+            stmt = stmt.where(Metric.region_id == region_id)
+
         if city:
             stmt = stmt.join(Company).filter(Company.city == city)
 
-        if reverse:
+        if metric in metrics_low:
             stmt = stmt.order_by(Metric.value)
         else:
             stmt = stmt.order_by(Metric.value.desc())
@@ -42,12 +45,14 @@ def metrics_top(metric: str = typer.Argument(None, help="metric name"),
         print(f"# total: {c} metrics")
 
         for m in stmt:
-            print(f"{m.company.object_id} {m.company.title!r} ({m.company.nreviews()}) {m.name}={m.value}")
+            print(f"{m.company.object_id} {m.company.title!r} (nr:{m.company.nreviews()}) {m.name}={m.value}")
 
 
 @metrics_app.command(name="list")
 def metrics_list(oid: str = typer.Argument(None, help="show only for object_id"),
-                city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")):
+            region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
+            metric: str = typer.Option(None, "-m", "--metric", help="Metric name"),
+            city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")):
     """ show metrics """
     object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
 
@@ -55,14 +60,45 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
         stmt = dbsession.query(Metric)
         if object_id:
             stmt = stmt.filter(Metric.company_id == object_id)
+        if region_id:
+            stmt = stmt.filter(Metric.region_id == region_id)
+        if metric:
+            stmt = stmt.filter(Metric.name == metric)
         if city:
             stmt = stmt.join(Company).filter(Company.city == city)
+
+        if metric:
+            if metric in metrics_low:
+                print("LOW")
+                stmt = stmt.order_by(Metric.value.desc())
+            else:
+                print("HIGH")
+                stmt = stmt.order_by(Metric.value)
+
+
+
+
+
 
         c = stmt.count()
         print(f"# total: {c} metrics")
 
-        for m in stmt:
-            print(m)
+
+        percentiles_tags = dict()
+
+        if metric:
+            for p in percentiles_values:
+                pos = c * p // 100
+                print(f"p{p}: {pos}/{c}")
+                percentiles_tags[pos] = p
+        
+
+        for idx,m in enumerate(stmt):
+            if idx in percentiles_tags:
+                tag = f"<<< p{percentiles_tags[idx]}"
+            else:
+                tag = ""
+            print(f'{idx+1:3d} {m} {tag}')
 
 
 
@@ -129,6 +165,8 @@ def metrics_wipe(
 
 def metrics_run_code(c: Company):
 
+    """ make metrics for company c """
+
     with DBSession() as dbsession:
         c = dbsession.merge(c)
 
@@ -151,6 +189,8 @@ def metrics_run_code(c: Company):
         cdf = pd.DataFrame(data)
         adf = pd.DataFrame()
 
+
+
         if cdf.empty:
             logger.error(f"Empty reviews for {c.object_id}")
             metrics = {"is_empty": 1}
@@ -168,13 +208,14 @@ def metrics_run_code(c: Company):
             metrics = run_metrics(c.object_id, cdf, adf)
             save_metrics(c, metrics=metrics, dbsession=dbsession)
         except AFNoCompany as e:
+            print(f"AFNoCompany exception: {c.object_id} {e}")
+            c.error = f"AFNoCompany: {e}"
+            dbsession.commit()            
             logger.error(e)
             return
 
         # total df    
         print_json(data=metrics)
-
-
 
 
 
@@ -216,6 +257,8 @@ def metrics_run(
                 if c.object_id.startswith("_test"):
                     print("SKIP test company", c)
                     continue
+
+                print(c.object_id, c.title, "mc:",c.metrics_calculated, c.updated_at, c.error)
 
                 print(f"{idx}/{total} uptime: {int(time.time() - started)}s {c}")
                 metrics_run_code(c)
