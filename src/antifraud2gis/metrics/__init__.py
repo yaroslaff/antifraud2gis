@@ -11,9 +11,9 @@ from .neigh import run_neigh_metrics
 from .author import run_author_metrics
 
 # too high value => suspicious
-metrics_high = ['private_ratio', 'external_ratio']
+metrics_high = ['private_ratio', 'external_ratio', 'zodiac:ratio']
 # too low value => suspicious
-metrics_low = ['rpa:mean', 'rpa:median']
+metrics_low = ['rpa:mean', 'rpa:median' , 'neigh:ratio']
 
 
 metrics_all = metrics_high + metrics_low
@@ -28,9 +28,17 @@ def save_metrics(c: Company, metrics: dict, dbsession: Session):
 
         metric = dbsession.query(Metric).filter_by(company=c, name=metric_name).first()
         if metric:
-            metric.value = value
+            if isinstance(value, (int, float)):
+                metric.value = value
+            else:
+                metric.value = None
+                metric.string_value = str(value)
         else:
-            metric = Metric(company=c, region_id=c.region_id, name=metric_name, value=value)
+            if isinstance(value, (int, float)):
+                metric = Metric(company=c, region_id=c.region_id, name=metric_name, value=value)
+            else:
+                # maybe string?
+                metric = Metric(company=c, region_id=c.region_id, name=metric_name, value=None, string_value=str(value))
             dbsession.add(metric)
 
     c.metrics_calculated = datetime.datetime.now()

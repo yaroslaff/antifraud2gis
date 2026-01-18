@@ -22,7 +22,10 @@ metrics_app = typer.Typer(help="Metrics commands")
 @metrics_app.command(name="top")
 def metrics_top(metric: str = typer.Argument(None, help="metric name"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
-                city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city")):
+                city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
+                asc: bool = typer.Option(False, "--asc", help="ascending order"),
+                desc: bool = typer.Option(False, "--desc", help="descending order"),
+                ):
     """ show metrics """
 
     with DBSession() as dbsession:
@@ -34,10 +37,23 @@ def metrics_top(metric: str = typer.Argument(None, help="metric name"),
         if city:
             stmt = stmt.join(Company).filter(Company.city == city)
 
-        if metric in metrics_low:
+
+
+        if asc:
+            ascending = True
+        elif desc:
+            ascending = False
+        else:
+            if metric in metrics_low :
+                ascending = True
+            else:
+                ascending = False
+
+        if ascending:
             stmt = stmt.order_by(Metric.value)
         else:
             stmt = stmt.order_by(Metric.value.desc())
+        
         stmt = stmt.limit(20)
 
 
@@ -45,7 +61,7 @@ def metrics_top(metric: str = typer.Argument(None, help="metric name"),
         print(f"# total: {c} metrics")
 
         for m in stmt:
-            print(f"{m.company.object_id} {m.company.title!r} (nr:{m.company.nreviews()}) {m.name}={m.value}")
+            print(f"{m.company.object_id} {m.company.title!r} r{m.company.region_id} (nr:{m.company.nreviews()}) {m.name}={m.value}")
 
 
 @metrics_app.command(name="list")
@@ -112,15 +128,15 @@ def countdown(n=10):
 
 @metrics_app.command(name="wipe")
 def metrics_wipe(
-    oid: str = typer.Argument(help="show only for object_id"),
+    oid: str = typer.Argument(None, help="show only for object_id"),
     region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")
     ):
     """ wipe metrics """
-    object_id = resolve_alias(oid) if oid.lower() != ':all' else None
+    object_id = resolve_alias(oid) if oid is not None else None
     print("wipe metrics...", object_id)
 
     with DBSession() as dbsession:        
-        if oid.lower() == ':all' and region_id is None:
+        if oid is None  and region_id is None:
             # WHOLE DATABASE
             print("wipe metrics for ALL companies")
             countdown()
@@ -221,13 +237,13 @@ def metrics_run_code(c: Company):
 
 @metrics_app.command(name="run")
 def metrics_run(
-    oid: str = typer.Argument(":all", help="2GIS object_id or :all"),
+    oid: str = typer.Argument(None, help="2GIS object_id or :all"),
     city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
     region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")
     ):
     """ run metrics for company or :all companies """
 
-    if oid == ":all":
+    if oid is None:
         started = time.time()
         part_started = time.time()
         part_size = 100

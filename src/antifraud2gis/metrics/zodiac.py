@@ -15,26 +15,33 @@ def run_zodiac_metrics(cdf2gis: pd.DataFrame) -> dict:
     if cdf2gis.empty:
         return metrics
 
-    metrics['mean_age'] = intnone(cdf2gis.loc[:, "age"].mean()) 
-    metrics['median_age'] = intnone(cdf2gis.loc[:, "age"].median())
+    metrics['zodiac:mean_age'] = intnone(cdf2gis["age"].mean()) 
+    metrics['zodiac:median_age'] = intnone(cdf2gis["age"].median())
+
+    cdf2gis = cdf2gis.sort_values("author_created")
+    s = pd.Series(1, index=cdf2gis["author_created"])
+    counts = s.rolling("30D").sum()
+    # находим максимум и соответствующую дату конца окна
+    end_time = counts.idxmax()
+    max_count = counts.max()
+    start_time = end_time - pd.Timedelta(days=30)
+    print(f"Max: {max_count} from {start_time.date()} to {end_time.date()}")
 
 
+    # verify. print everything from start_time to end_time
+    peak30d = cdf2gis[(cdf2gis["author_created"] >= start_time) & (cdf2gis["author_created"] <= end_time)]    
 
-    zodiac = cdf2gis["author_created"].dt.month.value_counts().sort_index().reindex(range(1, 13), fill_value=0)
+    if len(peak30d) == max_count:
+        print("Zodiac double_check passed")
+    else:
+        print("Zodiac double_check FAILED")
     
-    metrics['zodiac:max'] = int(zodiac.max())
-    metrics['zodiac:std'] = round(zodiac.std(), 2)
-    metrics['zodiac:cv'] = round(zodiac.std() / zodiac.mean(), 2)
+    assert len(peak30d) == max_count
 
-    cdf2gis['author_created_ym'] = cdf2gis['author_created'].dt.strftime('%Y%m')
+    metrics['zodiac:nauthors'] = intnone(max_count)
+    metrics['zodiac:period_start'] = start_time.strftime("%Y-%m-%d")
+    metrics['zodiac:period_end'] = end_time.strftime("%Y-%m-%d")
+    metrics['zodiac:ratio'] = round(len(cdf2gis) / max_count,2)
+    metrics['zodiac:rating'] = round(peak30d['rating'].mean(), 1)
     
-    ym = cdf2gis.groupby('author_created_ym')['author_id'].nunique().sort_values()
-
-    metrics['zodiacym:max'] = int(ym.max())
-
-    metrics['zodiacym:std'] = round(ym.std(), 2) 
-    metrics['zodiacym:cv'] = round(ym.std() / ym.mean(), 2)
-
-    metrics['zodiacym:len'] = len(ym)
-    metrics['zodiacym:ratio'] = round(len(ym)/len(cdf2gis), 2)
     return metrics

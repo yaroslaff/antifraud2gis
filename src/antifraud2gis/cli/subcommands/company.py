@@ -279,7 +279,7 @@ def сompany_list(
 
             if fmt == ListOutputFormat.brief:
                 print(c.object_id)
-            elif fmt == ListOutputFormat.full:                
+            elif fmt == ListOutputFormat.full:
                 nrstr = f'NR:{c.nreviews()}' if nr else ''
                 print(f'{c.object_id} ({c.rating_2gis}) r{c.region_id} {c.title} {nrstr}')
             else:

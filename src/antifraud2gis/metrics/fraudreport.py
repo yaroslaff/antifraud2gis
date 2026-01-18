@@ -108,17 +108,9 @@ class FraudReport:
         return metrics_report
         
     def dump(self):
-        print("Summary report:")
-        print("Local region:")
-        for mr in self.metrics_local.values():
-            print(f"  {mr.name}: {mr.stars_hit}/{mr.stars_total} stars hit (value={mr.value})")
-        
-        print("Control region:")
-        for mr in self.metrics_control.values():
-            print(f"  {mr.name}: {mr.stars_hit}/{mr.stars_total} stars hit (value={mr.value})")
-
+        print(f"Fraud Report for company {self.company.object_id} ({self.company.title})")
         for metric in metrics_all:
             ml = self.metrics_local.get(metric)
             mc = self.metrics_control.get(metric)
             mf = self.metrics_final.get(metric)
-            print(f"Final {metric}: {mf.stars_hit}/{mf.stars_total} stars hit (value={mf.value}) from local {ml.stars_hit}/{ml.stars_total} and control {mc.stars_hit}/{mc.stars_total}")
+            print(f"Final {metric}: {mf.stars_hit}/{mf.stars_total} stars hit (value={mf.value}) Lr:{ml.stars_hit} / Cr:{mc.stars_hit}")
