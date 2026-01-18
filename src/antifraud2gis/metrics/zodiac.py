@@ -38,10 +38,12 @@ def run_zodiac_metrics(cdf2gis: pd.DataFrame) -> dict:
     
     assert len(peak30d) == max_count
 
+    print(f"ratio: {len(cdf2gis)}/{max_count}={round(len(cdf2gis)/max_count, 2)}")
+
     metrics['zodiac:nauthors'] = intnone(max_count)
     metrics['zodiac:period_start'] = start_time.strftime("%Y-%m-%d")
     metrics['zodiac:period_end'] = end_time.strftime("%Y-%m-%d")
-    metrics['zodiac:ratio'] = round(len(cdf2gis) / max_count,2)
+    metrics['zodiac:ratio'] = round(max_count * 100 / len(cdf2gis), 3)
     metrics['zodiac:rating'] = round(peak30d['rating'].mean(), 1)
     
     return metrics
