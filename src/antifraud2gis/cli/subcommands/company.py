@@ -415,7 +415,7 @@ def сompany_update(
                 ):
     # print(f"refresh {oid} r{region_id} days={days}")
 
-    stmt = select(Company).where(Company.updated_at.isnot(None))
+    stmt = select(Company).where(Company.updated_at.isnot(None)).where(Company.error.is_(None))
 
     if region_id is not None:
         stmt = stmt.where(Company.region_id == region_id)
@@ -439,6 +439,6 @@ def сompany_update(
                 Company.fetch(object_id=c.object_id, full=True, notolder=c.updated_at)
             except AFNoCompany as e:
                 c.error = str(e)
-                
+
             print(f"UPDATED {c.object_id} nr: {old_nr} --> {c.nreviews()}\n")
         dbsession.commit()
