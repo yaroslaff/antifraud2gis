@@ -435,6 +435,10 @@ def сompany_update(
             total+=1
             old_nr = c.nreviews()
             print(f"{total}: {c.object_id} r:{c.region_id} nr: {c.nreviews()} {c.updated_at} {(datetime.now() - c.updated_at).days} days ({c.title})")
-            Company.fetch(object_id=c.object_id, full=True, notolder=c.updated_at)
+            try:
+                Company.fetch(object_id=c.object_id, full=True, notolder=c.updated_at)
+            except AFNoCompany as e:
+                c.error = str(e)
+                
             print(f"UPDATED {c.object_id} nr: {old_nr} --> {c.nreviews()}\n")
         dbsession.commit()

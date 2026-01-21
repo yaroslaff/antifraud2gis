@@ -236,6 +236,7 @@ class Company(Base):
 
                     public_id = r['user']['public_id']
 
+
                     if notolder is not None:
                         review_date = dateutil.parser.parse(r['date_created'])
 
