@@ -137,11 +137,13 @@ class Author(Base):
         dbsession.commit()
         return _user
 
-    def update_reviews(self, dbsession: Session):
+    def update_reviews(self, dbsession: Session) -> int:
         """ fetch reviews from network and update self.reviews | NO COMMIT INSIDE"""
 
         from .company import Company
         from .review import Review
+
+        reviews_added = 0
 
         def split_addr(addr: str): 
             if ',' in obj['address']:
@@ -203,6 +205,7 @@ class Author(Base):
                         created=datetime.fromisoformat(review_data['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
                     )
                     dbsession.add(_review)
+                    reviews_added += 1
                 else:
                     print("Review already in DB:", review_data['id'])
         except AFAuthorPrivate as e:
@@ -211,6 +214,8 @@ class Author(Base):
             if private:
                 print("set private for", self.public_id)
                 self.private = True
+
+        return reviews_added
 
             # dbsession.commit()
 

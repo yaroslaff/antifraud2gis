@@ -93,6 +93,7 @@ def arg_aliases():
     aa.alias("cf", ["company", "fetch"])
     aa.alias("cw", ["company", "wipe"])
     aa.alias("ct", ["company", "trace"])
+    aa.alias("cu", ["company", "update"])
 
 
     aa.alias("a", "author")

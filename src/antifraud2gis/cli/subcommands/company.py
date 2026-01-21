@@ -405,3 +405,36 @@ def сompany_error(oid: str, error: str = typer.Argument(help="Error message or 
         except AFNoCompany as e:
             logger.error(e)
         dbsession.commit()
+
+@company_app.command(name="update")
+def сompany_update(
+                oid: str = typer.Argument(None, help="2GIS object_id"),
+                region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
+                days: int = typer.Option(30, "-d", "--days", help="Process only companies updated older then N days"),
+                limit: int = typer.Option(10, "-l", "--limit", help="Limit to N companies"),
+                ):
+    # print(f"refresh {oid} r{region_id} days={days}")
+
+    stmt = select(Company).where(Company.updated_at.isnot(None))
+
+    if region_id is not None:
+        stmt = stmt.where(Company.region_id == region_id)
+
+    if oid is not None:
+        object_id = resolve_alias(oid)
+        stmt = stmt.where(Company.object_id == object_id) 
+    
+    stmt = stmt.where(Company.updated_at < datetime.now(timezone.utc) - timedelta(days=days))
+    stmt = stmt.order_by(Company.updated_at.asc())
+    stmt = stmt.limit(limit)
+
+    total = 0
+
+    with DBSession() as dbsession:        
+        for c in dbsession.scalars(stmt):
+            total+=1
+            old_nr = c.nreviews()
+            print(f"{c.object_id} r:{c.region_id} nr: {c.nreviews()} {c.updated_at} {(datetime.now() - c.updated_at).days} days ({c.title})")
+            Company.fetch(object_id=c.object_id, full=True, notolder=c.updated_at)
+            print(f"UPDATED {c.object_id} nr: {old_nr} --> {c.nreviews()}\n")
+        dbsession.commit()

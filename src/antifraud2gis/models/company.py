@@ -190,9 +190,14 @@ class Company(Base):
 
         
 
+
         from .review import Review
         # dbsession = dbsession or DBSession()
         # print(f"FETCH {object_id} full: {full} notolder: {notolder} caller: {caller()}")
+
+        if notolder and notolder.tzinfo is None:    
+            notolder = notolder.replace(tzinfo=timezone.utc)
+
 
         with DBSession() as dbsession:
 
@@ -202,6 +207,7 @@ class Company(Base):
             current_review_idx = 1
 
             ext_reviews = list()
+            new_reviews_loaded = 0
 
             # fetch statistics
             stats_reviews = 0
@@ -209,6 +215,7 @@ class Company(Base):
             stats_private = 0
             stats_public_2gis = 0 
 
+            
             meta = None
 
             with Progress(
@@ -231,8 +238,9 @@ class Company(Base):
 
                     if notolder is not None:
                         review_date = dateutil.parser.parse(r['date_created'])
+
                         if review_date <= notolder:
-                            print("skipping review date", review_date, "older than", notolder)
+                            # print("skipping review date", review_date, "older than", notolder)
                             break
                         #else:
                             # seems always newer
@@ -262,7 +270,10 @@ class Company(Base):
                                 else:
                                     # print(f"c: {object_id}: update author: {public_id}")
                                     if not u.private:
-                                        df = u.update_reviews(dbsession=author_dbsession)
+                                        ar_added = u.update_reviews(dbsession=author_dbsession)
+                                        if ar_added:
+                                            # print(f"Added {ar_added} reviews for {u.public_id}")
+                                            new_reviews_loaded += 1
                                 
                                 if u.private:
                                     # save review anyway
@@ -277,6 +288,7 @@ class Company(Base):
                                             created=datetime.fromisoformat(r['date_created'].replace("Z", "+00:00")).replace(microsecond=0)
                                         )
                                         author_dbsession.add(_review)
+                                        new_reviews_loaded += 1
                                     else:
                                         # print("Private review already in DB:", r['id'])
                                         pass
@@ -385,7 +397,9 @@ class Company(Base):
 
 
     def info(self):
-        return f'{self} updated_at: {self.updated_at} reviews: {self.nreviews()}'
+
+        age = f'{(datetime.now() - self.updated_at).days}d' if self.updated_at else 'never'
+        return f'{self} updated_at: {self.updated_at} ({age}) reviews: {self.nreviews()}'
 
     def __repr__(self):
 
