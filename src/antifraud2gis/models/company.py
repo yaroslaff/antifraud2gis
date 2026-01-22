@@ -543,5 +543,15 @@ class Company(Base):
 
         if nreviews:
             d['nreviews'] = self.nreviews()
+        
+        if self.updated_at:
+
+            # set UTC timezone for updated_at if missing
+            if self.updated_at.tzinfo is None:
+                self.updated_at = self.updated_at.replace(tzinfo=timezone.utc)
+
+            d['updated_age'] = (datetime.now(timezone.utc) - self.updated_at).days
+        else:
+            d['updated_age'] = None
         return d
 

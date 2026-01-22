@@ -211,12 +211,14 @@ class ListOutputFormat(Enum):
 def сompany_list(
                 needle: str = typer.Argument(None, help="search needle in object_id/title/address"),
                 fmt: ListOutputFormat = typer.Option(ListOutputFormat.full, "--fmt", "-f", help="Output format: (full*/brief/json)"),
+                template: str = typer.Option(None, "--tpl", help="Output template"),
                 filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
+                limit: int = typer.Option(None, "-l", "--limit", help="Limit to N companies"),
                 error: bool = typer.Option(None, "-e", "--error", help="Process only error companies"),
                 ok: bool = typer.Option(None, "-k", "--ok", help="Process only ok companies"),
                 nr: bool = typer.Option(False, "--nr", help="count nreviews"),
-                sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")
+                sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")                
                 ):
     """ list company's object_ids """
 
@@ -237,7 +239,9 @@ def сompany_list(
         stmt = stmt.where(
                 func.lower(Company.search_str).like(needle_like),
         )
-
+    
+    if limit:
+        stmt = stmt.limit(limit)
 
     total = 0
     printed = 0
@@ -277,7 +281,11 @@ def сompany_list(
 
             printed += 1
 
-            if fmt == ListOutputFormat.brief:
+            if template:
+                # template
+                tpl = template.format(**c.to_dict(nreviews=nr))
+                print(tpl)
+            elif fmt == ListOutputFormat.brief:
                 print(c.object_id)
             elif fmt == ListOutputFormat.full:
                 nrstr = f'NR:{c.nreviews()}' if nr else ''
