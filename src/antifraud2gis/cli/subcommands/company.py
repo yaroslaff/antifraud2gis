@@ -199,19 +199,10 @@ def сompany_trace(oid: str = typer.Argument(None, help="object_id")):
                     print(f"### SEENLOOP: {object_id}")
                 print()
 
-
-
-class ListOutputFormat(Enum):
-    full = "full"
-    brief = "brief"
-    json = "json"
-    
-
 @company_app.command(name="list")
 def сompany_list(
                 needle: str = typer.Argument(None, help="search needle in object_id/title/address"),
-                fmt: ListOutputFormat = typer.Option(ListOutputFormat.full, "--fmt", "-f", help="Output format: (full*/brief/json)"),
-                template: str = typer.Option(None, "--tpl", help="Output template"),
+                fmt: str = typer.Option("full", "--fmt", "-f", help="Output format: (full*/brief/json/quiet)"),
                 filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
                 limit: int = typer.Option(None, "-l", "--limit", help="Limit to N companies"),
@@ -281,20 +272,22 @@ def сompany_list(
 
             printed += 1
 
-            if template:
-                # template
-                tpl = template.format(**c.to_dict(nreviews=nr))
-                print(tpl)
-            elif fmt == ListOutputFormat.brief:
+            if fmt == "brief":
                 print(c.object_id)
-            elif fmt == ListOutputFormat.full:
+            elif fmt == "full":
                 nrstr = f'NR:{c.nreviews()}' if nr else ''
                 print(f'{c.object_id} ({c.rating_2gis}) r{c.region_id} {c.title} {nrstr}')
-            else:
+            elif fmt == "quiet" or fmt == "q":
+                pass
+            elif fmt == "json":
                 # json
                 filtered.append(c.to_dict(nreviews=nr))
+            else:
+                # template
+                tpl = fmt.format(**c.to_dict(nreviews=nr))
+                print(tpl)
 
-        if fmt == ListOutputFormat.json:
+        if fmt == "json":
             print(json.dumps(filtered, indent=4))
 
         if sum_:
