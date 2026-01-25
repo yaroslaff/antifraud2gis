@@ -13,7 +13,7 @@ import json
 from sqlalchemy import select, func, and_
 
 from ...models import Company, Author
-from ...db import DBSession
+from ...db import DBSession, count, dump_stmt
 from ...aliases import resolve_alias
 from ...net.company_reviews import CompanyReviewsIterator
 from ...logger import logger
@@ -202,17 +202,22 @@ def сompany_trace(oid: str = typer.Argument(None, help="object_id")):
 @company_app.command(name="list")
 def сompany_list(
                 needle: str = typer.Argument(None, help="search needle in object_id/title/address"),
-                fmt: str = typer.Option("full", "--fmt", "-f", help="Output format: (full*/brief/json/quiet)"),
+                fmt: str = typer.Option("full", "--fmt", "-f", help="Output format: (full*/brief/json"),
+                quiet: bool = typer.Option(False, "--quiet", "-q", help="Quiet mode, no output (only summary)"),
                 filter_expr: str = typer.Option(None, "--expr", help="company filter expression"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
                 limit: int = typer.Option(None, "-l", "--limit", help="Limit to N companies"),
                 error: bool = typer.Option(None, "-e", "--error", help="Process only error companies"),
                 ok: bool = typer.Option(None, "-k", "--ok", help="Process only ok companies"),
                 nr: bool = typer.Option(False, "--nr", help="count nreviews"),
+                updated: int | None = typer.Option(None, "-u", "--updated", help=">0: updated within N days, <0: updated older then N days, 0: never updated"),
                 sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")                
                 ):
     """ list company's object_ids """
 
+
+    if quiet:
+        sum_ = True
 
     stmt = select(Company)
 
@@ -230,14 +235,28 @@ def сompany_list(
         stmt = stmt.where(
                 func.lower(Company.search_str).like(needle_like),
         )
-    
+
+    if updated is not None:
+        if updated > 0:
+            stmt = stmt.where(
+                Company.updated_at.isnot(None),
+                Company.updated_at >= (datetime.now(timezone.utc) - timedelta(days=updated)).date()
+            )
+        elif updated < 0:
+            stmt = stmt.where(                
+                    Company.updated_at.isnot(None),
+                    Company.updated_at < (datetime.now(timezone.utc) - timedelta(days=abs(updated))).date()
+                )
+        else:
+            stmt = stmt.where(Company.updated_at.is_(None))
+
     if limit:
         stmt = stmt.limit(limit)
 
     total = 0
     printed = 0
     skipped = 0
-    count = None
+    cnt = None
     expr: evalidate.Expr | None = None
     filtered = list()
 
@@ -253,9 +272,16 @@ def сompany_list(
             return 1
 
     with DBSession() as dbsession:
+
+        if sum_ and quiet and expr is None:            
+            cnt = count(stmt, dbsession)
+            print(f"# SQL count: {cnt}")
+            return
+
         if sum_:
-            count = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
-        
+            #cnt = dbsession.scalar(select(func.count()).select_from(stmt.subquery()))
+            cnt = count(stmt, dbsession)
+
         for c in dbsession.scalars(stmt):
 
             total+=1
@@ -277,7 +303,7 @@ def сompany_list(
             elif fmt == "full":
                 nrstr = f'NR:{c.nreviews()}' if nr else ''
                 print(f'{c.object_id} ({c.rating_2gis}) r{c.region_id} {c.title} {nrstr}')
-            elif fmt == "quiet" or fmt == "q":
+            elif quiet:
                 pass
             elif fmt == "json":
                 # json
@@ -291,7 +317,7 @@ def сompany_list(
             print(json.dumps(filtered, indent=4))
 
         if sum_:
-            print(f"# SQL count: {count} (printed:{printed} + skipped:{skipped} = {total})")
+            print(f"# SQL count: {cnt} (printed:{printed} + skipped:{skipped} = {total})")
 
 
 
@@ -425,13 +451,18 @@ def сompany_update(
         object_id = resolve_alias(oid)
         stmt = stmt.where(Company.object_id == object_id) 
     
-    stmt = stmt.where(Company.updated_at < datetime.now(timezone.utc) - timedelta(days=days))
+    if oid is None:
+        # this filter only makes sense for bulk update
+        stmt = stmt.where(Company.updated_at < datetime.now(timezone.utc) - timedelta(days=days))
+    
+    
     stmt = stmt.order_by(Company.updated_at.asc())
     stmt = stmt.limit(limit)
 
     total = 0
 
-    with DBSession() as dbsession:        
+    with DBSession() as dbsession:
+
         for c in dbsession.scalars(stmt):
             total+=1
             old_nr = c.nreviews()

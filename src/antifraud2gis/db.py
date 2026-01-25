@@ -1,6 +1,7 @@
 from sqlalchemy import create_engine
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker, Session, scoped_session
+from sqlalchemy.dialects import sqlite 
 from .base import Base
 
 from .settings import settings
@@ -9,6 +10,24 @@ from .settings import settings
 _engine = None
 ScopedDBSession = None
 DBSession = None
+
+
+from sqlalchemy import Select, select, func
+from sqlalchemy.orm import Session
+
+def count(stmt: Select, dbsession: Session) -> int:
+    """Return number of rows for given SQLAlchemy Select"""
+    count_stmt = select(func.count()).select_from(stmt.subquery())
+    result = dbsession.scalar(count_stmt)
+    return (int(result or 0))
+
+def dump_stmt(stmt: Select):
+    print(
+        stmt.compile(
+        dialect=sqlite.dialect(),
+        compile_kwargs={"literal_binds": True}
+        )
+    )
 
 class DebugSession(Session):
     def commit(self):

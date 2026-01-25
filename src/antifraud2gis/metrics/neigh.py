@@ -2,6 +2,15 @@ import pandas as pd
 from ..db import DBSession
 from ..models import Company
 
+class Neighbor:
+    oid: str
+    hits: int
+
+    def __init__(self, oid: str, hits: int):
+        self.oid = oid
+        self.hits = hits
+
+
 def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> dict:
 
 
