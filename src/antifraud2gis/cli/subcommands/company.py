@@ -13,6 +13,7 @@ import json
 from sqlalchemy import select, func, and_
 
 from ...models import Company, Author
+from ...metrics.neigh import Neighbors
 from ...db import DBSession, count, dump_stmt
 from ...aliases import resolve_alias
 from ...net.company_reviews import CompanyReviewsIterator
@@ -442,7 +443,7 @@ def сompany_update(
                 ):
     # print(f"refresh {oid} r{region_id} days={days}")
 
-    stmt = select(Company).where(Company.updated_at.isnot(None)).where(Company.error.is_(None))
+    stmt = select(Company).where(Company.updated_at.isnot(None), Company.error.is_(None))
 
     if region_id is not None:
         stmt = stmt.where(Company.region_id == region_id)
@@ -474,3 +475,78 @@ def сompany_update(
 
             print(f"UPDATED {c.object_id} nr: {old_nr} --> {c.nreviews()}\n")
         dbsession.commit()
+
+@company_app.command(name="compare")
+def сompany_compare(
+                oid: str = typer.Argument(None, help="2GIS object_id"),
+                oid2: str = typer.Argument(None, help="2GIS object_id 2")
+                ):
+    object_id = resolve_alias(oid)
+    object_id2 = resolve_alias(oid2)
+
+    with DBSession() as dbsession:
+        c1 = Company.get(object_id=object_id, dbsession=dbsession)
+        c2 = Company.get(object_id=object_id2, dbsession=dbsession)
+
+        revs1 = c1.data_reviews()
+        revs2 = c2.data_reviews()
+
+        df1 = pd.DataFrame(revs1)
+        df2 = pd.DataFrame(revs2)
+
+        authors1 = set(df1['author_id'].dropna().unique())
+        authors2 = set(df2['author_id'].dropna().unique())
+
+        only1 = authors1 - authors2
+        only2 = authors2 - authors1
+        both = authors1 & authors2
+
+        print(f"A: {c1.object_id} {c1.title} reviews:{len(df1)} unique authors:{len(authors1)}")
+        print(f"B: {c2.object_id} {c2.title} reviews:{len(df2)} unique authors:{len(authors2)}")
+        print(f"In both: {len(both)}")
+
+        for author in both:
+            a = Author.get(public_id=author, dbsession=dbsession)
+            # a_date = datetime! date of review to company1
+            a_date = df1[df1['author_id'] == author]['created'].max().split(' ')[0]
+            b_date = df2[df2['author_id'] == author]['created'].max().split(' ')[0]
+
+            a_rate = df1[df1['author_id'] == author]['rating'].mean()
+            b_rate = df2[df2['author_id'] == author]['rating'].mean()
+            print(f"{a.public_id} {a.created.date()} {a.name} {a_date} {b_date} {a_rate}/{b_rate}")
+
+        
+
+
+
+@company_app.command(name="neigh", hidden=True)
+@company_app.command(name="neighbors")
+def сompany_neighbors(
+                oid: str = typer.Argument(None, help="2GIS object_id")
+                ):
+    object_id = resolve_alias(oid)
+    nbrs = Neighbors()
+
+    with DBSession() as dbsession:
+        c = Company.get(object_id=object_id, dbsession=dbsession)
+        reviews = c.data_reviews()
+        authors = set()
+        for r in reviews:
+            if r['provider'] != '2gis' or r['private']:
+                continue
+            authors.add(r['author_id'])
+
+        for a in authors:
+            aobj = Author.get(public_id=a, dbsession=dbsession)
+            if aobj is None:
+                continue
+            arevs = aobj.data_reviews()
+            for ar in arevs:
+                if ar['object_id'] == object_id:
+                    continue
+                nbrs.hit(public_id=a, oid=ar['object_id'], rate=ar['rating'])
+        
+    with DBSession() as dbsession:
+        for n in nbrs.topneighbors(minhits=2):
+            _c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
+            print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")

@@ -10,6 +10,7 @@ from .author import Author
 from .company import Company
 from ..base import Base
 from ..db import DBSession
+from ..settings import settings
 
 class Review(Base):
 
@@ -213,6 +214,21 @@ class Review(Base):
         # check if review is already in db
         stmt = select(exists().where(Review.id == review_id))
         return bool(dbsession.scalar(stmt))
+
+    def is_fresh(self, max_age_days: int | None = None) -> bool:
+
+        # def: settings.max_review_age
+        if max_age_days is None:
+            
+            max_age_days = settings.max_review_age
+
+        # make comparison ignoring possible timezone issues
+        created = self.created
+        if created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)            
+
+        age_days = (datetime.now(timezone.utc) - created).days
+        return age_days <= max_age_days
 
     def __repr__(self):
         # print_json(data=self._data)

@@ -180,3 +180,33 @@ def reviews_wipe(public_id: str,
             dbsession.delete(r)        
         dbsession.commit()
 
+
+@author_app.command(name="info")
+def author_info(
+    public_id: str = typer.Argument(..., help="Author public_id")
+):
+    
+    from ...models.company import Company
+
+    with DBSession() as dbsession:
+        a = Author.get(public_id=public_id, dbsession=dbsession)
+        if a is None:
+            print(f"Author {public_id} not found", file=sys.stderr)
+            return
+
+        print(f"public_id: {a.public_id}")
+        print(f"name: {a.name}")
+        print(f"private: {a.private}")
+        print(f"created (2gis): {a.created}")
+        print(f"updated: {a.updated}")
+        print(f"seen: {a.seen}")
+        c = Company.get_or_fetch(object_id=a.seen, dbsession=dbsession, full=False)
+        print(f"seen company:", c.title if c else a.seen)
+        print(f"nreviews (total): {len(a.reviews)}")
+        # reviews within settings.max_review_age_days
+        nreviews_fresh = sum(1 for r in a.reviews if (r.is_fresh()))
+        print(f"nreviews (fresh): {nreviews_fresh}")
+        print("first review:", a.first_review().date())
+        print("last review:", a.last_review().date())
+
+    

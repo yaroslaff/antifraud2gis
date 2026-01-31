@@ -357,6 +357,17 @@ class Author(Base):
         )
         return metrics
 
+    def last_review(self) -> datetime | None:
+        """ return datetime of last review or None """
+        if not self.reviews:
+            return None
+        return max(r.created for r in self.reviews)
+
+    def first_review(self) -> datetime | None:
+        """ return datetime of first review or None """
+        if not self.reviews:
+            return None
+        return min(r.created for r in self.reviews)
 
     def __repr__(self):
         tags=""

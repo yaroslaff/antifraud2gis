@@ -94,9 +94,12 @@ def arg_aliases():
     aa.alias("cw", ["company", "wipe"])
     aa.alias("ct", ["company", "trace"])
     aa.alias("cu", ["company", "update"])
+    aa.alias("cn", ["company", "neighbors"])
+    aa.alias("cc", ["company", "compare"])
 
 
     aa.alias("a", "author")
+    aa.alias("ai", ["author", "info"])
     aa.alias("af", ["author", "fetch"])
     aa.alias("ar", ["author", "reviews"])
     aa.alias("arn", ["author", "reviews-net"])
