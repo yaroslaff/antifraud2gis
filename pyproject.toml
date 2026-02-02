@@ -5,7 +5,7 @@ dependencies = [
     "requests",
     "requests-cache",
     "loguru",
-    "rich",
+    "rich>=14.3.2",
     "argalias>=1.0.1",
     "python-dotenv",
     "numpy",
