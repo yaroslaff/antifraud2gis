@@ -435,13 +435,13 @@ def сompany_error(oid: str, error: str = typer.Argument(help="Error message or 
         dbsession.commit()
 
 @company_app.command(name="update")
-def сompany_update(
+def company_update(
                 oid: str = typer.Argument(None, help="2GIS object_id"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
                 days: int = typer.Option(30, "-d", "--days", help="Process only companies updated older then N days"),
                 limit: int = typer.Option(10, "-l", "--limit", help="Limit to N companies"),
                 ):
-    # print(f"refresh {oid} r{region_id} days={days}")
+    print(f"refresh {oid} r{region_id} days={days}")
 
     stmt = select(Company).where(Company.updated_at.isnot(None), Company.error.is_(None))
 
@@ -522,9 +522,13 @@ def сompany_compare(
 @company_app.command(name="neigh", hidden=True)
 @company_app.command(name="neighbors")
 def сompany_neighbors(
-                oid: str = typer.Argument(None, help="2GIS object_id")
+                oid: str = typer.Argument(None, help="2GIS object_id"),
+                minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor")
                 ):
     object_id = resolve_alias(oid)
+
+    print("Calculating neighbors for company:", object_id)
+
     nbrs = Neighbors()
 
     with DBSession() as dbsession:
@@ -547,6 +551,6 @@ def сompany_neighbors(
                 nbrs.hit(public_id=a, oid=ar['object_id'], rate=ar['rating'])
         
     with DBSession() as dbsession:
-        for n in nbrs.topneighbors(minhits=2):
+        for n in nbrs.topneighbors(minhits=minhits):
             _c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
             print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
