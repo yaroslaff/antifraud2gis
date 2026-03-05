@@ -526,11 +526,12 @@ def сompany_neighbors(
                 oid: str = typer.Argument(None, help="2GIS object_id"),
                 minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor")
                 ):
+    
     object_id = resolve_alias(oid)
 
     print("Calculating neighbors for company:", object_id)
 
-    nbrs = Neighbors(a_oid=oid)
+    nbrs = Neighbors(a_oid=object_id)
 
     nbrs.process()
 
@@ -540,6 +541,7 @@ def сompany_neighbors(
             #_c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
             #print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
 
+    nbrs.summary()
 
 
 def OLD_сompany_neighbors(

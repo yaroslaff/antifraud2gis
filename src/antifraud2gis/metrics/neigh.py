@@ -90,17 +90,23 @@ class Neighbor:
 class Neighbors:
     neighbors: dict[str, Neighbor]
     a_oid: str
+    authorset: set
+    nreviews: int # only b reviews
 
     def __init__(self, a_oid: str):
         self.a_oid = a_oid
         self.neighbors = dict()
+        self.nreviews = 0
+        self.authorset = set()
 
     def b_hit(self, r: Review):
         if r.object_id not in self.neighbors:
             self.neighbors[r.object_id] = Neighbor(a_oid=self.a_oid, b_oid=r.object_id)
         self.neighbors[r.object_id].b_hit(r=r)
+        self.nreviews += 1
     
     def a_hit(self, r: Review):
+        self.authorset.add(r.author_id)
         for n in self.neighbors.values():
             n.a_hit(r)
 
@@ -128,6 +134,9 @@ class Neighbors:
             
             self.calculate(dbsession=dbsession)
 
+    def summary(self):
+        print(f"nreviews: {self.nreviews}")
+        print(f"nauthors: {len(self.authors)}")
 
 def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> dict:
 
