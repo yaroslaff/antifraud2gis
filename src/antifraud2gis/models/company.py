@@ -396,6 +396,23 @@ class Company(Base):
         for r in self.reviews:            
             yield r.author
 
+    def fresh_reviews(self, dbsession: Session|None = None, provider: str|None = None):
+        from .review import Review
+        days = settings.max_review_age
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        q = (
+            dbsession.query(Review)
+            .filter(
+                Review.object_id == self.object_id,
+                Review.created >= cutoff
+            )
+        )
+
+        if provider is not None:
+            q = q.filter(Review.provider == provider)
+
+        return q.order_by(Review.created.asc()).all()
 
     def info(self):
 

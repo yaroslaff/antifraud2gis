@@ -521,7 +521,28 @@ def сompany_compare(
 
 @company_app.command(name="neigh", hidden=True)
 @company_app.command(name="neighbors")
+
 def сompany_neighbors(
+                oid: str = typer.Argument(None, help="2GIS object_id"),
+                minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor")
+                ):
+    object_id = resolve_alias(oid)
+
+    print("Calculating neighbors for company:", object_id)
+
+    nbrs = Neighbors(a_oid=oid)
+
+    nbrs.process()
+
+    with DBSession() as dbsession:
+        for n in nbrs.topneighbors(minhits=minhits):
+            print(n.dumps(dbsession=dbsession))
+            #_c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
+            #print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
+
+
+
+def OLD_сompany_neighbors(
                 oid: str = typer.Argument(None, help="2GIS object_id"),
                 minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor")
                 ):
@@ -548,9 +569,10 @@ def сompany_neighbors(
             for ar in arevs:
                 if ar['object_id'] == object_id:
                     continue
-                nbrs.hit(public_id=a, oid=ar['object_id'], rate=ar['rating'])
+                print(ar)
+                nbrs.b_hit(public_id=a, oid=ar['object_id'], rate=ar['rating'])
         
     with DBSession() as dbsession:
         for n in nbrs.topneighbors(minhits=minhits):
-            _c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
-            print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
+            _c = Company.get_or_fetch(object_id=n.b_oid, dbsession=dbsession, full=False)   
+            print(f"{n.bhits} ({n.brating:.2f}) hits: {_c}")

@@ -135,12 +135,18 @@ class Review(Base):
 
     @property
     def author_age(self) -> int | None:
+        """ author.age from registration """
         if self.author is None:
             return None
 
-        return (self.created - self.author.first_review()).days
+        return self.user.birthday() - self.created
 
-        # return user_age(self._user.birthday(), self.created)
+    @property
+    def author_age_1r(self) -> int | None:
+        """ author.age from 1st review"""
+        if self.author is None:
+            return None
+        return (self.created - self.author.first_review()).days
 
 
     @property

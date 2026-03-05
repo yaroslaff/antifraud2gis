@@ -323,6 +323,21 @@ class Author(Base):
             if r.oid == oid:
                 return r
 
+    def fresh_reviews(self, dbsession: Session =None):
+        from .review import Review
+        days = settings.max_review_age
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+        return (
+            dbsession.query(Review)
+            .filter(
+                Review.author_id == self.public_id,
+                Review.created >= cutoff
+            )
+            .order_by(Review.created.asc())  # oldest first
+            .all()
+        )
+
+
     @property
     def url(self):
         return f"https://2gis.ru/af2gis/user/{self.public_id}"
