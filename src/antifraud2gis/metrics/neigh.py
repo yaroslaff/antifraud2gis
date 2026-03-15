@@ -3,8 +3,8 @@ import numpy as np
 from ..db import DBSession, Session
 from ..models.company import Company
 from ..models.review import Review
-
-
+from ..settings import settings
+from datetime import datetime, timezone, timedelta
 
 """
 TODO:
@@ -90,14 +90,14 @@ class Neighbor:
 class Neighbors:
     neighbors: dict[str, Neighbor]
     a_oid: str
-    authorset: set
+    authors: set
     nreviews: int # only b reviews
 
     def __init__(self, a_oid: str):
         self.a_oid = a_oid
         self.neighbors = dict()
         self.nreviews = 0
-        self.authorset = set()
+        self.authors = set()
 
     def b_hit(self, r: Review):
         if r.object_id not in self.neighbors:
@@ -106,7 +106,7 @@ class Neighbors:
         self.nreviews += 1
     
     def a_hit(self, r: Review):
-        self.authorset.add(r.author_id)
+        self.authors.add(r.author_id)
         for n in self.neighbors.values():
             n.a_hit(r)
 
@@ -120,6 +120,49 @@ class Neighbors:
                 yield n
 
     def process(self):
+
+        with DBSession() as dbsession:
+
+            days = settings.max_review_age
+            cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+
+            author_ids = (
+                dbsession.query(Review.author_id)
+                .filter(Review.object_id == self.a_oid, Review.created >= cutoff)
+                .distinct()
+                .all()
+            )
+
+            author_ids = [a[0] for a in author_ids]
+            print(f'{len(author_ids)} authors')
+
+            reviews = (
+                dbsession.query(Review)
+                .join(Company, Review.object_id == Company.object_id)
+                .filter(
+                    Review.author_id.in_(author_ids),
+                    Company.error.is_(None),
+                    Review.created >= cutoff
+                )
+            )
+
+            print("reviews:")
+            for idx, r in enumerate(reviews):
+                # print(idx, r)
+
+                if r.object_id == self.a_oid:
+                    self.a_hit(r=r)
+                else:
+                    self.b_hit(r=r)
+
+            print(f"loaded {idx} reviews")
+
+        print("calculate")
+        self.calculate(dbsession=dbsession)
+
+        return
+
         with DBSession() as dbsession:
             c = Company.get(object_id=self.a_oid, dbsession=dbsession)
             for r in c.fresh_reviews(dbsession=dbsession, provider="2gis"):
@@ -135,6 +178,7 @@ class Neighbors:
             self.calculate(dbsession=dbsession)
 
     def summary(self):
+        print(f"Summary for {self.a_oid}\n---")
         print(f"nreviews: {self.nreviews}")
         print(f"nauthors: {len(self.authors)}")
 
