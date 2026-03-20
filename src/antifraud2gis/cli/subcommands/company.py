@@ -8,6 +8,7 @@ import sys
 from datetime import datetime, timedelta, timezone
 import evalidate
 from enum import Enum
+from itertools import islice
 import json
 
 from sqlalchemy import select, func, and_
@@ -524,7 +525,8 @@ def сompany_compare(
 
 def сompany_neighbors(
                 oid: str = typer.Argument(None, help="2GIS object_id"),
-                minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor")
+                minhits: int = typer.Option(10, "--minhits", "-m", help="Minimum common authors to be a neighbor"),
+                printn: int = typer.Option(None, "-n", help="Print neighbour N")
                 ):
     
     object_id = resolve_alias(oid)
@@ -536,14 +538,20 @@ def сompany_neighbors(
     nbrs.process()
 
     with DBSession() as dbsession:
-        for n in nbrs.topneighbors(minhits=minhits):
-            print(n.dumps(dbsession=dbsession))
-            #_c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
-            #print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
+        topn = list(nbrs.topneighbors(minhits=minhits))
+
+    for idx, n in enumerate(topn):
+        print(f"#{idx}", n.dumps(dbsession=dbsession))
 
     # nbrs.summary()
     metrics = nbrs.run_metrics()
     print_json(data=metrics)
+    if printn is not None:
+        try:
+            n = topn[printn]
+            print(f"Neighbor #{printn}: {n}")
+        except IndexError:
+            print(f"no such neighbor #{printn} (minhits: {minhits})")
 
 
 

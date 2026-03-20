@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 
 from typing import Dict
+from itertools import islice
 
 from ..db import DBSession, Session
 from ..models.company import Company
@@ -23,7 +24,7 @@ class Neighbor:
     bhits: int
     bsum_rate: int
     brating: float
-    public_ids: set[str]
+    authors: set[str]
     long: bool
 
     def __init__(self, a_oid, b_oid: str):
@@ -37,7 +38,7 @@ class Neighbor:
         self.asum_rate = 0
         self.brating = 0
         self.arating = 0
-        self.public_ids = set()
+        self.authors = set()
         self.ages = list()
         self.ages1r = list()
 
@@ -53,7 +54,7 @@ class Neighbor:
         self.bsum_rate += r.rating
 
         self.brating = self.bsum_rate / self.bhits if self.bhits > 0 else 0
-        self.public_ids.add(r.author_id)
+        self.authors.add(r.author_id)
 
         age = (r.created - r.author.created).days
         age1r = (r.created - r.author.first_review()).days
@@ -67,7 +68,7 @@ class Neighbor:
         self.ahits += 1
 
     def __repr__(self) -> str:
-        return f'{self.b_oid}: hits={self.bhits} ({len(self.public_ids)} authors) avg_rate={self.brating:.2f} age: {np.median(self.ages):}/{np.mean(self.ages):.1f} '
+        return f'{self.b_oid}: hits={self.bhits} ({len(self.authors)} authors) avg_rate={self.brating:.2f} age: {np.median(self.ages):}/{np.mean(self.ages):.1f} '
 
     def calculate(self, dbsession: Session):
         # calc params after all reviews are processed
@@ -86,7 +87,7 @@ class Neighbor:
 
     def dumps(self, dbsession) -> str:
         longtag = "[LONG]" if self.long else ""
-        return f'{self.b_oid} {self.bc.title} ({self.bc.city} r{self.bc.region_id} {longtag}): hits={self.bhits} ({len(self.public_ids)} authors) avg_rate={self.brating:.2f} age: {np.median(self.ages):}/{np.mean(self.ages):.1f} '
+        return f'{self.b_oid} {self.bc.title} ({self.bc.city} r{self.bc.region_id} {longtag}): hits={self.bhits} ({len(self.authors)} authors) avg_rate={self.brating:.2f} age: {np.median(self.ages):}/{np.mean(self.ages):.1f} '
 
 
 class Neighbors:
@@ -157,9 +158,6 @@ class Neighbors:
                 )
             )
 
-            print("processing reviews")
-
-            assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
 
             a_reviews = list()
             for idx, r in enumerate(reviews):
@@ -172,40 +170,18 @@ class Neighbors:
                 else:
                     self.b_hit(r=r)
 
-            assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
-
-
             print("processing a_reviews")
             for r in a_reviews:                
                 self.a_hit(r=r)
-                assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
 
 
             print(f"loaded {idx} reviews")
 
-        assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
-
         print("calculate")
         self.calculate(dbsession=dbsession)
 
-        assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
-
 
         return
-
-        with DBSession() as dbsession:
-            c = Company.get(object_id=self.a_oid, dbsession=dbsession)
-            for r in c.fresh_reviews(dbsession=dbsession, provider="2gis"):
-                for ar in r.author.fresh_reviews(dbsession=dbsession):
-                    if ar.company.error:
-                        # print("ERR", ar.company)
-                        continue
-                    self.b_hit(ar)
-
-            for r in c.fresh_reviews(dbsession=dbsession, provider="2gis"):
-                self.a_hit(r=r)
-            
-            self.calculate(dbsession=dbsession)
 
     def summary(self):
         print(f"Summary for {self.a_oid}\n---")
@@ -217,11 +193,22 @@ class Neighbors:
         metrics = dict()
         metrics['neigh:total'] = len(self.neighbors)
 
-        topn = next(self.topneighbors())
+        top1 = next(self.topneighbors())
 
-        metrics['neigh:topnhits'] = len(topn.public_ids) if topn else 0
+        top5authors = set() 
+        for n in islice(self.topneighbors(), 5):
+            top5authors |= n.authors
+
+
         metrics['neigh:authors'] = len(self.authors)
-        metrics['neigh:topnhits_ratio'] = round(100 * len(topn.public_ids) / len(self.authors), 2) if topn and self.nreviews > 0 else 0
+        
+        metrics['neigh:top1authors'] = len(top1.authors) if top1 else 0
+        metrics['neigh:top1ratio'] = round(100 * len(top1.authors) / len(self.authors), 2) if top1 and self.nreviews > 0 else 0
+
+        metrics['neigh:top5authors'] = len(top5authors) if top5authors else 0
+        metrics['neigh:top5ratio'] = round(100 * len(top5authors) / len(self.authors), 2) if top5authors and self.nreviews > 0 else 0
+
+
         return metrics
 
 def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> dict:
