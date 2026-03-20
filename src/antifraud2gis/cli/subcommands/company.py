@@ -541,7 +541,10 @@ def сompany_neighbors(
             #_c = Company.get_or_fetch(object_id=n.oid, dbsession=dbsession, full=False)   
             #print(f"{n.hits} ({n.rating:.2f}) hits: {_c}")
 
-    nbrs.summary()
+    # nbrs.summary()
+    metrics = nbrs.run_metrics()
+    print_json(data=metrics)
+
 
 
 def OLD_сompany_neighbors(

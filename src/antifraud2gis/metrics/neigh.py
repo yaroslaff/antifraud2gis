@@ -1,10 +1,15 @@
 import pandas as pd
 import numpy as np
+
+from typing import Dict
+
 from ..db import DBSession, Session
 from ..models.company import Company
 from ..models.review import Review
 from ..settings import settings
 from datetime import datetime, timezone, timedelta
+
+
 
 """
 TODO:
@@ -65,7 +70,6 @@ class Neighbor:
         return f'{self.b_oid}: hits={self.bhits} ({len(self.public_ids)} authors) avg_rate={self.brating:.2f} age: {np.median(self.ages):}/{np.mean(self.ages):.1f} '
 
     def calculate(self, dbsession: Session):
-        print("CALC N", self.b_oid)
         # calc params after all reviews are processed
         self.b_age_mean = np.mean(self.ages)
         self.b_age_median = np.median(self.ages)
@@ -73,10 +77,8 @@ class Neighbor:
         self.b_age1r_mean = np.mean(self.ages1r)
         self.b_age1r_median = np.median(self.ages1r)
 
-        print("make ac", self.a_oid)
         self.ac = Company.get_or_fetch(self.a_oid, dbsession=dbsession, full=False)
 
-        print("make bc", self.b_oid)
         self.bc = Company.get_or_fetch(self.b_oid, dbsession=dbsession, full=False)
         
         self.long = self.ac.region_id != self.bc.region_id
@@ -100,6 +102,12 @@ class Neighbors:
         self.authors = set()
 
     def b_hit(self, r: Review):
+
+        if r.object_id == self.a_oid:
+            print("!!! SKIP a_review", r)
+            assert False, "b_hit should not process a_reviews"
+            
+
         if r.object_id not in self.neighbors:
             self.neighbors[r.object_id] = Neighbor(a_oid=self.a_oid, b_oid=r.object_id)
         self.neighbors[r.object_id].b_hit(r=r)
@@ -120,6 +128,8 @@ class Neighbors:
                 yield n
 
     def process(self):
+
+        assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
 
         with DBSession() as dbsession:
 
@@ -147,19 +157,39 @@ class Neighbors:
                 )
             )
 
-            print("reviews:")
+            print("processing reviews")
+
+            assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
+
+            a_reviews = list()
             for idx, r in enumerate(reviews):
                 # print(idx, r)
 
                 if r.object_id == self.a_oid:
-                    self.a_hit(r=r)
+                    # self.a_hit(r=r)
+                    a_reviews.append(r)
+                    pass
                 else:
                     self.b_hit(r=r)
 
+            assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
+
+
+            print("processing a_reviews")
+            for r in a_reviews:                
+                self.a_hit(r=r)
+                assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
+
+
             print(f"loaded {idx} reviews")
+
+        assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
 
         print("calculate")
         self.calculate(dbsession=dbsession)
+
+        assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
+
 
         return
 
@@ -181,6 +211,18 @@ class Neighbors:
         print(f"Summary for {self.a_oid}\n---")
         print(f"nreviews: {self.nreviews}")
         print(f"nauthors: {len(self.authors)}")
+    
+
+    def run_metrics(self) -> Dict[str, int | float | str ]:
+        metrics = dict()
+        metrics['neigh:total'] = len(self.neighbors)
+
+        topn = next(self.topneighbors())
+
+        metrics['neigh:topnhits'] = len(topn.public_ids) if topn else 0
+        metrics['neigh:authors'] = len(self.authors)
+        metrics['neigh:topnhits_ratio'] = round(100 * len(topn.public_ids) / len(self.authors), 2) if topn and self.nreviews > 0 else 0
+        return metrics
 
 def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> dict:
 
