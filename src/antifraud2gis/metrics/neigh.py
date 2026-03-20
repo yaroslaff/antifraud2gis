@@ -93,6 +93,7 @@ class Neighbor:
 class Neighbors:
     neighbors: dict[str, Neighbor]
     a_oid: str
+    ac: Company
     authors: set
     nreviews: int # only b reviews
 
@@ -101,6 +102,7 @@ class Neighbors:
         self.neighbors = dict()
         self.nreviews = 0
         self.authors = set()
+        self.ac = None
 
     def b_hit(self, r: Review):
 
@@ -133,6 +135,8 @@ class Neighbors:
         assert self.a_oid not in self.neighbors, "a_oid should not be in neighbors"
 
         with DBSession() as dbsession:
+
+            self.ac = Company.get(self.a_oid, dbsession=dbsession)
 
             days = settings.max_review_age
             cutoff = datetime.now(timezone.utc) - timedelta(days=days)
@@ -193,7 +197,12 @@ class Neighbors:
         metrics = dict()
         metrics['neigh:total'] = len(self.neighbors)
 
-        top1 = next(self.topneighbors())
+
+        try:
+            top1 = next(self.topneighbors())
+        except StopIteration:
+            print(f"#NONEIGH {self.a_oid}: err:{self.ac.error} {self.ac.nreviews()} reviews. {self.ac}")
+            return metrics
 
         top5authors = set() 
         for n in islice(self.topneighbors(), 5):
