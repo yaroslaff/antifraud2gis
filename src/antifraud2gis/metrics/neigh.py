@@ -181,8 +181,8 @@ class Neighbors:
 
             print(f"loaded {idx} reviews")
 
-        print("calculate")
-        self.calculate(dbsession=dbsession)
+            print("calculate")
+            self.calculate(dbsession=dbsession)
 
 
         return
