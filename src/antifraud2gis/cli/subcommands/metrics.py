@@ -4,6 +4,7 @@ from rich import print_json
 import pandas as pd
 from sqlalchemy import select, func, and_
 import time
+import sys
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
@@ -185,7 +186,6 @@ def metrics_run_code(c: Company):
 
     with DBSession() as dbsession:
         c = dbsession.merge(c)
-
         try:
             if c.full_load():
                 # if loaded new reviews, refresh
@@ -196,7 +196,6 @@ def metrics_run_code(c: Company):
             c.error = str(e)
             dbsession.commit()
             return
-                
         data = c.data_reviews()
         # print_json(data=data)
 
@@ -206,18 +205,21 @@ def metrics_run_code(c: Company):
         adf = pd.DataFrame()
 
 
-
         if cdf.empty:
             logger.error(f"Empty reviews for {c.object_id}")
             metrics = {"is_empty": 1}
             save_metrics(c, metrics=metrics, dbsession=dbsession)
             return
 
-        for author_id in cdf['author_id'].dropna().unique():
-            with DBSession() as dbsession2:
-                # print(author_id)
+
+        with DBSession() as dbsession2:
+            for author_id in cdf['author_id'].dropna().unique():
                 a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession2)
-                adf = pd.concat([adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))], ignore_index=True)
+                adf = pd.concat(
+                    [adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))],
+                    ignore_index=True
+                )
+
 
         logger.debug("Running metrics...")
         try:
@@ -277,7 +279,13 @@ def metrics_run(
                 print(c.object_id, c.title, "mc:",c.metrics_calculated, c.updated_at, c.error)
 
                 print(f"{idx}/{total} uptime: {int(time.time() - started)}s {c}")
-                metrics_run_code(c)
+                try:
+                    print("# metrics_run_code", c)
+                    metrics_run_code(c)
+                except Exception as e:
+                    print("EXCEPTION IN metrics_run_code!", type(e), e)
+                    sys.exit(1)
+
                 if idx % part_size == 0:
                     print(f"PART ({part_size}) ({idx}/{total}) finished in {int(time.time() - part_started)}s RATE: {(int(time.time() - part_started))/part_size:.1f} seconds per company")
                     part_started = time.time()

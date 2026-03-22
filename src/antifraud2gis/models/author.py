@@ -15,7 +15,7 @@ import tempfile
 import os
 
 from sqlalchemy import Column, String, Text, ForeignKey, Boolean, DateTime, func, select
-from sqlalchemy.orm import Session, declarative_base, relationship, Mapped, mapped_column, reconstructor
+from sqlalchemy.orm import Session, declarative_base, relationship, Mapped, mapped_column, reconstructor, joinedload
 
 from ..const import WSS_THRESHOLD, LOAD_NREVIEWS, SLEEPTIME, LMDB_MAP_SIZE
 from ..settings import settings
@@ -270,7 +270,7 @@ class Author(Base):
 
             return _r.created
 
-    def data_reviews(self, dbsession: Session | None = None, days=None) -> list:
+    def data_reviews_OLD(self, dbsession: Session | None = None, days=None) -> list:
         from .review import Review
         data = list()
         
@@ -287,6 +287,27 @@ class Author(Base):
             data = [r.as_dict() for r in recent_reviews]
             return data
 
+
+    def data_reviews(self, dbsession: Session | None = None, days=None) -> list:
+        from .review import Review
+
+        days = days or settings.max_review_age
+        cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+
+        def _query(s):
+            recent_reviews = s.query(Review) \
+                .options(joinedload(Review.author)) \
+                .filter(
+                    Review.author_id == self.public_id,
+                    Review.created >= cutoff
+                ).all()
+            return [r.as_dict() for r in recent_reviews]
+
+        if dbsession is not None:
+            return _query(dbsession)
+        else:
+            with DBSession() as s:
+                return _query(s)
 
     def towns(self):
         self.load()
@@ -379,10 +400,16 @@ class Author(Base):
         return max(r.created for r in self.reviews)
 
     def first_review(self) -> datetime | None:
-        """ return datetime of first review or None """
-        if not self.reviews:
-            return None
-        return min(r.created for r in self.reviews)
+        from .review import Review
+
+        with DBSession() as dbsession:
+            r = (
+                dbsession.query(Review.created)
+                .filter(Review.author_id == self.public_id)
+                .order_by(Review.created.asc())
+                .first()
+            )
+            return r[0] if r else None
 
     def __repr__(self):
         tags=""

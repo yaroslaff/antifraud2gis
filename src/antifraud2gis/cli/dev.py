@@ -11,6 +11,7 @@ from rich.progress import Progress
 from rich.console import Console
 from rich.panel import Panel
 from rich.syntax import Syntax
+import faulthandler
 
 from pathlib import Path
 from argalias import ArgAlias
@@ -495,6 +496,7 @@ def cmd_cust2(
 
 def main():
     # args = get_args()
+    faulthandler.enable()
     arg_aliases()
     # cl = CompanyList()
     stopfile = Path('~/.af2gis-stop').expanduser()
