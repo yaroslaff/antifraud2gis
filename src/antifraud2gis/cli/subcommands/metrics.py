@@ -2,12 +2,14 @@ import typer
 
 from rich import print_json
 import pandas as pd
-from sqlalchemy import select, func, and_
+from sqlalchemy import select, exists, func, and_
 import time
 import sys
+import plotly.express as px
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
+from ...models.metricperc import MetricPerc
 from ...models.company import Company
 from ...models.author import Author
 from ...models.authormetric import AuthorMetric
@@ -74,6 +76,29 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
     object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
 
     with DBSession() as dbsession:
+
+
+        if metric and metric.startswith('-'):
+            # search companies which has no metric
+            metricname = metric[1:]
+            print(f"# look for companies which has NO {metricname!r} metric")
+
+            filters = [
+                ~exists().where(
+                    (Metric.company_id == Company.object_id) &
+                    (Metric.name == metricname)
+                )
+            ]
+
+            if region_id is not None:
+                filters.append(Company.region_id == region_id)
+
+            for c in dbsession.query(Company).filter(*filters).all():
+                print(c)
+
+            return
+
+
         stmt = dbsession.query(Metric)
         if object_id:
             stmt = stmt.filter(Metric.company_id == object_id)
@@ -91,11 +116,6 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
             else:
                 print("HIGH")
                 stmt = stmt.order_by(Metric.value)
-
-
-
-
-
 
         c = stmt.count()
         print(f"# total: {c} metrics")
@@ -119,13 +139,88 @@ def metrics_list(oid: str = typer.Argument(None, help="show only for object_id")
 
 
 
+@metrics_app.command(name="graph")
+def metrics_graph(metric: str = typer.Argument(None, help="Metric name"),
+            region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),            
+            city: str = typer.Option(None, "-c", "--city", help="Process only companies from this city"),
+            write: str = typer.Option(None, "-w", "--write", help="Write chart to file (html/png)"),
+            size: int = typer.Option(10, "-s", "--size", help="Marker size"),
+            object_id: str = typer.Option(None, "-o", help="Highlight this object_id")):
+    """ show metrics """
+    
+    with DBSession() as dbsession:
+
+        stmt = dbsession.query(Metric)
+        if metric:
+            stmt = stmt.filter(Metric.name == metric)
+        if region_id:
+            stmt = stmt.filter(Metric.region_id == region_id)
+        if city:
+            stmt = stmt.join(Company).filter(Company.city == city)
+
+
+        c = stmt.count()
+        print(f"# total: {c} metrics")
+
+        points = list()
+
+
+        for idx, m in enumerate(stmt):
+            highlight = "normal" if m.company.object_id != object_id else "highlight"
+
+            if highlight == "highlight":
+                print(f"HIGHLIGHT: {m.company.object_id} {m.company.title}")
+
+            points.append({
+                "name": f'{m.company.object_id} {m.company.title}',
+                "reviews": m.company.nreviews(fresh=True, provider="2gis"),
+                "metric": m.value,
+                "highlight": highlight
+            })
+
+        print(f"Draw {len(points)} points")
+
+        if not len(points):
+            print("No points to draw!")
+            sys.exit(1)
+
+        fig = px.scatter(points, x="reviews", y="metric", hover_name="name", 
+                        color="highlight",
+                        color_discrete_map={"normal": "steelblue", "highlight": "red"},
+                        title=f"{metric} r{region_id}")
+
+        print("load percentiles...")
+        stmtp = dbsession.query(MetricPerc).filter(MetricPerc.name == metric)
+        if region_id:
+            stmtp = stmtp.filter(MetricPerc.region_id == region_id)
+        percentiles = {mp.p: mp.value for mp in stmtp}
+        print("percentiles:", percentiles)
+
+
+        # dash: "solid", "dot", "dash", "longdash", "dashdot", or "longdashdot"
+
+        hline_param = dict(dash="dot", color="black", width=1)
+
+        for p, v in percentiles.items():
+            fig.add_hline(y=v, line=hline_param,   annotation_text=f"p{p}")
+
+        fig.update_traces(marker_size=size)
+
+        if not write:
+            fig.show()                
+        else:
+            if write.endswith(".html"):
+                fig.write_html(write)
+            elif write.endswith(".png") or write.endswith(".jpg"):
+                fig.write_image(write)
+
+
 def countdown(n=10):
     print(f"Countown {n} seconds... (Ctrl+C to cancel)")
     for i in range(1, 10):
         print(i, end=' ', flush=True)
         time.sleep(1)
     print()
-
 
 @metrics_app.command(name="wipe")
 def metrics_wipe(
@@ -180,6 +275,56 @@ def metrics_wipe(
 # cm 
 
 
+def make_adf(cdf: pd.DataFrame, dbsession: Session) -> pd.DataFrame:
+
+    def add_region_id(adf: pd.DataFrame) -> pd.DataFrame:
+        object_ids = adf['object_id'].dropna().unique().tolist()
+        
+        rows = dbsession.query(Company.object_id, Company.region_id, Company.title) \
+            .filter(Company.object_id.in_(object_ids)) \
+            .all()
+        
+        company_df = pd.DataFrame(rows, columns=['object_id', 'region_id', 'title'])
+        company_df['shorttitle'] = company_df['title'].str.split(',').str[0].str.strip()
+
+        adf = adf.merge(company_df, on='object_id', how='left')
+        return adf
+
+    def calc_top_region(adf: pd.DataFrame) -> pd.DataFrame:
+        region_counts = adf.groupby(['author_id', 'region_id']).size().reset_index(name='count')
+        total_counts = adf.groupby('author_id').size().reset_index(name='total')
+        
+        top_region = region_counts.loc[region_counts.groupby('author_id')['count'].idxmax()] \
+            .rename(columns={'region_id': 'top_region_id', 'count': 'top_count'})
+        
+        top_region = top_region.merge(total_counts, on='author_id')
+        top_region['top_region_ratio'] = top_region['top_count'] / top_region['total']
+        
+        return adf.merge(
+            top_region[['author_id', 'top_region_id', 'top_region_ratio']],
+            on='author_id',
+            how='left'
+        )
+
+    def init_adf(cdf: pd.DataFrame) -> pd.DataFrame:
+        adf = pd.DataFrame()
+        with DBSession() as dbsession2:
+            for author_id in cdf['author_id'].dropna().unique():
+                a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession2)
+                adf = pd.concat(
+                    [adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))],
+                    ignore_index=True
+                )
+
+        return adf
+
+    adf = init_adf(cdf=cdf)
+
+    adf = add_region_id(adf)
+    adf = calc_top_region(adf)
+
+    return adf
+
 def metrics_run_code(c: Company):
 
     """ make metrics for company c """
@@ -202,8 +347,6 @@ def metrics_run_code(c: Company):
         logger.debug(f"Load {len(data)} authors...")
         # company df
         cdf = pd.DataFrame(data)
-        adf = pd.DataFrame()
-
 
         if cdf.empty:
             logger.error(f"Empty reviews for {c.object_id}")
@@ -211,14 +354,9 @@ def metrics_run_code(c: Company):
             save_metrics(c, metrics=metrics, dbsession=dbsession)
             return
 
-
-        with DBSession() as dbsession2:
-            for author_id in cdf['author_id'].dropna().unique():
-                a = Author.get_or_fetch(public_id=author_id, dbsession=dbsession2)
-                adf = pd.concat(
-                    [adf, pd.DataFrame(a.data_reviews(dbsession=dbsession2))],
-                    ignore_index=True
-                )
+        adf = make_adf(cdf = cdf, dbsession=dbsession)
+        # print(adf.columns.tolist())
+        # print(adf[adf['author_id'] == '4ea97e464bb6491c81868eead3aae2dd'][['author_id','object_id', 'rating', 'region_id', 'title', 'top_region_id', 'top_region_ratio']])
 
 
         logger.debug("Running metrics...")

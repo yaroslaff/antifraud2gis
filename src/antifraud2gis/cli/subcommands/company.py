@@ -213,7 +213,7 @@ def сompany_list(
                 ok: bool = typer.Option(None, "-k", "--ok", help="Process only ok companies"),
                 nr: bool = typer.Option(False, "--nr", help="count nreviews"),
                 updated: int | None = typer.Option(None, "-u", "--updated", help=">0: updated within N days, <0: updated older then N days, 0: never updated"),
-                sum_: bool = typer.Option(None, "--sum", help="Process only ok companies")                
+                sum_: bool = typer.Option(None, "--sum", help="Print summary")                
                 ):
     """ list company's object_ids """
 
@@ -290,19 +290,21 @@ def сompany_list(
 
             if expr:
                 # filter
-                try:
+                try:                    
                     if not expr.eval(c.to_dict(nreviews=nr)):
                         skipped += 1
                         continue
                 except evalidate.ExecutionException as e:
-                    print(e, file=sys.stderr)
+                    print(f"runtime exec error for {c}: {e}", file=sys.stderr)
+                    print(c)
+                    print(c.to_dict(nreviews=nr))
                     sys.exit(1)
 
             printed += 1
 
-            if fmt == "brief":
+            if fmt == "brief" and not quiet:
                 print(c.object_id)
-            elif fmt == "full":
+            elif fmt == "full" and not quiet:
                 nrstr = f'NR:{c.nreviews()}' if nr else ''
                 print(f'{c.object_id} ({c.rating_2gis}) r{c.region_id} {c.title} {nrstr}')
             elif quiet:
@@ -329,7 +331,7 @@ def сompany_fetch(oid: str = typer.Argument(None, help="object_id"),
                 update: bool = typer.Option(False, "--update", "-u", help="Update companies (even companies which has updated_at)"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)")):
 
-    object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
+    object_id = resolve_alias(oid, region_id = region_id) if oid and oid.lower() != ':all' else None
 
     cutoff = datetime.now(timezone.utc) - timedelta(days=settings.max_review_age)
 
@@ -435,11 +437,33 @@ def сompany_error(oid: str, error: str = typer.Argument(help="Error message or 
             logger.error(e)
         dbsession.commit()
 
+@company_app.command(name="info")
+def сompany_info(oid: str):
+    object_id = resolve_alias(oid)
+    with DBSession() as dbsession:
+        c = Company.get(object_id=object_id, dbsession=dbsession)
+        if c is None:
+            print("No such company:", object_id, file=sys.stderr)
+            sys.exit(1)
+
+
+        print(c)
+        print(f"updated: {c.updated_at} ({(datetime.now() - c.updated_at).days if c.updated_at else 'never'} days ago)")
+        print(f"rating 2gis: {c.rating_2gis}")
+        if c.error:
+            print(f"ERROR: {c.error}")
+        print(f"reviews total: {c.nreviews()}")
+        print(f"reviews fresh: {c.nreviews(fresh=True)}")
+        print(f"reviews fresh [2gis]: {c.nreviews(provider='2gis', fresh=True)}")
+
+
+
 @company_app.command(name="update")
 def company_update(
                 oid: str = typer.Argument(None, help="2GIS object_id"),
                 region_id: int = typer.Option(None, "-r", "--region_id", help="Process only companies from this region)"),
                 days: int = typer.Option(30, "-d", "--days", help="Process only companies updated older then N days"),
+                fix: bool = typer.Option(False, "--fix", help="Process only companies which need a fix (missing e.g. rating_2gis is None)"),
                 limit: int = typer.Option(10, "-l", "--limit", help="Limit to N companies"),
                 ):
     print(f"refresh {oid} r{region_id} days={days}")
@@ -449,10 +473,13 @@ def company_update(
     if region_id is not None:
         stmt = stmt.where(Company.region_id == region_id)
 
+    if fix:
+        stmt = stmt.where(Company.rating_2gis.is_(None))
+
     if oid is not None:
         object_id = resolve_alias(oid)
         stmt = stmt.where(Company.object_id == object_id) 
-    
+        
     if oid is None:
         # this filter only makes sense for bulk update
         stmt = stmt.where(Company.updated_at < datetime.now(timezone.utc) - timedelta(days=days))
@@ -468,7 +495,7 @@ def company_update(
         for c in dbsession.scalars(stmt):
             total+=1
             old_nr = c.nreviews()
-            print(f"{total}: {c.object_id} r:{c.region_id} nr: {c.nreviews()} {c.updated_at} {(datetime.now() - c.updated_at).days} days ({c.title})")
+            print(f"{total}: {c.object_id} (rating: {c.rating_2gis}) r:{c.region_id} nr: {c.nreviews()} {c.updated_at} {(datetime.now() - c.updated_at).days} days ({c.title})")
             try:
                 Company.fetch(object_id=c.object_id, full=True, notolder=c.updated_at)
             except AFNoCompany as e:

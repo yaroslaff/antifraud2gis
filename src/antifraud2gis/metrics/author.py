@@ -16,6 +16,8 @@ def run_author_metrics(adf: pd.DataFrame, cdf2gis: pd.DataFrame) -> dict:
     rev_count = pubadf.groupby("author_id").size()
 
 
+    print(cdf2gis)
+
     metrics['rpa:median'] = rev_count.median()
     metrics['rpa:mean'] = round(rev_count.mean(), 1)
 

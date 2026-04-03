@@ -138,7 +138,7 @@ class Company(Base):
 
 
     @classmethod
-    def random_next_company(cls, dbsession: Session, city = None):
+    def random_next_company(cls, dbsession: Session, city = None, region_id = None):
         base_query = select(cls).where(
             cls.updated_at.is_(None),
             cls.error.is_(None)
@@ -146,6 +146,9 @@ class Company(Base):
 
         if city:
             base_query = base_query.where(cls.city == city)
+
+        if region_id:
+            base_query = base_query.where(cls.region_id == region_id)
 
         cnt_stmt = base_query.with_only_columns(func.count()).order_by(None)        
 
@@ -228,6 +231,10 @@ class Company(Base):
             ) as progress:
                 task = progress.add_task("[cyan]Loading users...", total=None)            
 
+                reviews_from_2gis_processed = 0 
+                notolder_hit = False
+                oldest_2gis_review_date = None
+
                 for r in cr:
                     if meta is None:
                         meta = cr.meta
@@ -240,8 +247,13 @@ class Company(Base):
                     if notolder is not None:
                         review_date = dateutil.parser.parse(r['date_created'])
 
+                        if oldest_2gis_review_date is None or oldest_2gis_review_date > review_date:
+                            oldest_2gis_review_date = review_date
+
+
                         if review_date <= notolder:
                             # print("skipping review date", review_date, "older than", notolder)
+                            notolder_hit = True
                             break
                         #else:
                             # seems always newer
@@ -316,6 +328,7 @@ class Company(Base):
                                 return company
                     else:
                         ext_reviews.append(r)
+                
 
             if cr.pages_loaded == 0:
                 cls.check_company_alive(object_id=object_id)
@@ -324,6 +337,19 @@ class Company(Base):
             company = dbsession.get(cls, object_id)
             if company is None:
                 raise AFNoCompany(f"Total: {stats_reviews}, pub 2gis profiles: {stats_public_2gis} private profiles: {stats_private}")
+
+            if notolder_hit:
+                print(f"Stopped loading reviews because of notolder cutoff. Oldest 2gis review date: {oldest_2gis_review_date}, notolder: {notolder}")
+            else:
+                print("Oldest 2gis review date:", oldest_2gis_review_date)
+                # reviews are deleted! ZZZZZ
+                if oldest_2gis_review_date is not None:
+                    # IDK, but sometimes with None it delete
+                    for deleted_r in company.reviews_before(dbsession=dbsession, cutoff=oldest_2gis_review_date or datetime.now(timezone.utc)):
+                        print(f"delete (as deleted on 2gis) review: {deleted_r}")
+                        dbsession.delete(deleted_r)
+
+
 
             if ext_reviews:
                 saved_ext_reviews = 0
@@ -432,14 +458,25 @@ class Company(Base):
         return self.title
         # return self.title or self.object_id
 
-    def nreviews(self, provider = None):
+    def nreviews(self, provider = None, fresh=False):
         from .review import Review
 
         with DBSession() as dbsession:
-            if provider is None:
-                return dbsession.query(func.count(Review.id))\
-                            .filter(Review.object_id == self.object_id, Review.deleted == False)\
-                            .scalar() or 0
+
+            filters = [ Review.object_id == self.object_id, Review.deleted == False ]
+
+            if fresh:
+                cutoff = datetime.now(timezone.utc) - timedelta(days=settings.max_review_age)
+                filters.append(Review.created >= cutoff)
+
+            if provider:
+                filters.append(Review.provider == provider)
+
+            return dbsession.query(func.count(Review.id)) \
+                        .filter(*filters) \
+                        .scalar() or 0
+
+
 
     def data_reviews(self, provider = None, dbsession = None, days = None):
         """ All recent (max_review_age) reviews from db. (all providers) """
@@ -449,8 +486,6 @@ class Company(Base):
         # dbsession = dbsession or DBSession()
 
         days = days or settings.max_review_age
-
-
         cutoff = datetime.now(timezone.utc) - timedelta(days=days)
 
         with dbsession or DBSession() as dbsession:
@@ -461,6 +496,16 @@ class Company(Base):
 
             data = [r.as_dict() for r in recent_reviews]
             return data
+
+    def reviews_before(self, dbsession: "Session", cutoff: datetime) -> list["Review"]:
+        from .review import Review
+        stmt = (
+            select(Review)
+            .where(Review.object_id == self.object_id)
+            .where(Review.created < cutoff)
+            .order_by(Review.created.desc())
+        )
+        return dbsession.scalars(stmt).all()
 
 
     def wipe_metrics(self, dbsession: Session):

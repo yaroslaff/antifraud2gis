@@ -163,10 +163,10 @@ aliases = {
 }
 
 
-def random_next(purpose: str = "fraud"):
+def random_next(purpose: str = "fraud", region_id: str | None = None):
     if purpose == "fraud":
         with DBSession() as dbsession:
-            nxt = Company.random_next_company(dbsession=dbsession, city=settings.lock_city,)
+            nxt = Company.random_next_company(dbsession=dbsession, city=settings.lock_city, region_id=region_id)
             if nxt:
                 return str(nxt.object_id)
             else:
@@ -191,14 +191,14 @@ def random_next(purpose: str = "fraud"):
 
 
 
-def resolve_alias(alias: str, purpose: str = "fraud") -> str | None:
+def resolve_alias(alias: str, purpose: str = "fraud", region_id = None) -> str | None:
     for k, v in aliases.items():
         if v.get('alias') == alias:
             return k
         
     # not an alias
     if alias == ":next":
-        return random_next(purpose=purpose)
+        return random_next(purpose=purpose, region_id = region_id)
     
     else:
         if (len(alias) < 15 or len(alias) > 17) and not alias.startswith('_test'):

@@ -19,17 +19,56 @@ pipx install git+https://github.com/yaroslaff/antifraud2gis
 If you want just to run fraud detection on companies by 2GIS object-id, you need to use only `af2gis`.
 
 
-### Fraud detection
+### Basic commands
 ~~~
-# by OID:
-af2gis fraud 141265769338187
 
-# by alias
-af2gis fraud nskzoo
+# make fraud report for company
+af2dev reports fraud 141265769338187
+
+# or short form (same effect)
+af2dev rf 141265769338187
+
+# same by allias
+af2dev rf nskzoo
 
 # list all aliases:
 af2gis aliases
 ~~~
+
+### Other commands
+
+#### Companies
+
+~~~
+# search local database
+af2dev cl 'ваши окна'
+af2dev cl 'ваши окна' -r 1
+
+# complex search in database, including counting nreviews
+af2dev cl 'окна' -r 1  --nr --expr 'rating_2gis is not None and rating_2gis>4.7 and nreviews>10' -f json | jq
+
+# company fetch from 2gis
+af2dev cf 141265769826185 -f
+
+
+~~~
+
+#### Metrics
+~~~
+# list
+af2dev ml nskzoo
+~~~
+
+#### Percentiles
+~~~
+# list for region 1 (nsk)
+af2dev pl -r 1
+
+# list for metric
+af2dev pl -r 1 -m neigh:ratio
+~~~
+
+
 
 Next call to fraud detection will show old result unless `--overwrite` option given.
 

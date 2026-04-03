@@ -12,14 +12,14 @@ from .author import run_author_metrics
 from .neigh import Neighbors
 
 # too high value => suspicious
-metrics_high = ['private_ratio', 'external_ratio', 'zodiac:ratio']
+metrics_high = ['private_ratio', 'external_ratio', 'zodiac:ratio', 'neigh:top1ratio', 'neigh:top5ratio']
 # too low value => suspicious
 metrics_low = ['rpa:mean', 'rpa:median' , 'neigh:ratio']
 
 
 metrics_all = metrics_high + metrics_low
 
-percentiles_values = [50, 75, 90, 95, 99]
+percentiles_values = [75, 90, 95, 99, 99.9]
 
 
 

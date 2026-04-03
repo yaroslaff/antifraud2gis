@@ -53,7 +53,8 @@ class FraudReport:
             mc = self.metrics_control.get(metric)
 
             if ml is None or mc is None:
-                raise ValueError(f"Metric {metric} not found in local or control reports")
+                continue
+                # raise ValueError(f"Metric {metric} not found in local or control reports")
 
             # both present, take min stars hit
             if ml.stars_hit <= mc.stars_hit:
@@ -77,7 +78,7 @@ class FraudReport:
 
             m = self.company.get_metric(metric)
             if not m or m.value is None:
-                print(f"  Metric {metric} not found or has no value")
+                print(f"#  Metric {metric} not found or has no value")
                 continue
             # print(f"  Metric {metric} = {m.value}")
 
@@ -113,4 +114,6 @@ class FraudReport:
             ml = self.metrics_local.get(metric)
             mc = self.metrics_control.get(metric)
             mf = self.metrics_final.get(metric)
+            if mf is None:
+                continue
             print(f"Final {metric}: {mf.stars_hit}/{mf.stars_total} stars hit (value={mf.value}) Lr:{ml.stars_hit} / Cr:{mc.stars_hit}")

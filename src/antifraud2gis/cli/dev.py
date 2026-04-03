@@ -87,6 +87,7 @@ def arg_aliases():
 
     aa.alias("c" , "company")
     aa.alias("cl", ["company", "list"])
+    aa.alias("ci", ["company", "info"])
     aa.alias("ca", ["company", "authors"])
     aa.alias("cr", ["company", "reviews"])
     aa.alias("crn", ["company", "reviews-net"])
@@ -115,7 +116,9 @@ def arg_aliases():
     aa.alias("mw", ["metrics", "wipe"])
     aa.alias("mr", ["metrics", "run"])
     aa.alias("mt", ["metrics", "top"])
-    
+    aa.alias("mg", ["metrics", "graph"])
+
+
     aa.alias("mar", ["metrics", "arun"])
     aa.alias("maw", ["metrics", "awipe"])
     aa.alias(["mal", "mals"], ["metrics", "alist"])

@@ -33,6 +33,7 @@ class Neighbor:
         
         self.ahits = 0
         self.bhits = 0
+        self.region_id = None
 
         self.bsum_rate = 0
         self.asum_rate = 0
@@ -113,6 +114,7 @@ class Neighbors:
 
         if r.object_id not in self.neighbors:
             self.neighbors[r.object_id] = Neighbor(a_oid=self.a_oid, b_oid=r.object_id)
+
         self.neighbors[r.object_id].b_hit(r=r)
         self.nreviews += 1
     
@@ -196,6 +198,9 @@ class Neighbors:
     def run_metrics(self) -> Dict[str, int | float | str ]:
         metrics = dict()
         metrics['neigh:total'] = len(self.neighbors)
+        # default values
+        metrics['neigh:top1ratio'] = None
+        metrics['neigh:top5ratio'] = None
 
 
         try:
@@ -203,10 +208,15 @@ class Neighbors:
         except StopIteration:
             print(f"#NONEIGH {self.a_oid}: err:{self.ac.error} {self.ac.nreviews()} reviews. {self.ac}")
             return metrics
-
+                
         top5authors = set() 
         for n in islice(self.topneighbors(), 5):
             top5authors |= n.authors
+
+        long_authors = set() # authors from far neighbors (different region)
+        for n in self.topneighbors():
+            if n.long:
+                long_authors |= n.authors
 
 
         metrics['neigh:authors'] = len(self.authors)
@@ -217,6 +227,8 @@ class Neighbors:
         metrics['neigh:top5authors'] = len(top5authors) if top5authors else 0
         metrics['neigh:top5ratio'] = round(100 * len(top5authors) / len(self.authors), 2) if top5authors and self.nreviews > 0 else 0
 
+        metrics['neigh:longauthors'] = len(long_authors) if long_authors else 0
+        metrics['neigh:longratio'] = round(100 * len(long_authors) / len(self.authors), 2) if long_authors and self.nreviews > 0 else 0
 
         return metrics
 
@@ -235,6 +247,7 @@ def run_neigh_metrics(object_id: str, reviews2gis: int, adf: pd.DataFrame) -> di
 
     neighbour_count = adf.groupby("object_id").size()
     neighbour_count = neighbour_count.drop(object_id, errors="ignore")
+
     metrics['neigh:total'] = len(neighbour_count)
     metrics['neigh:ratio'] = round(len(neighbour_count) / reviews2gis, 2)
 

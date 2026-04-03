@@ -62,6 +62,7 @@ class MetricPerc(Base):
                 else:
                     pval = 100 - percentile
 
+                pval = round(pval, 2)
 
                 values = dbsession.scalars(
                     select(Metric.value)

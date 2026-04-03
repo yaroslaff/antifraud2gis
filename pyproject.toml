@@ -24,6 +24,8 @@ dependencies = [
     "ipython",
     "pandas",
     "numpy",
+    "plotly",
+    "kaleido",
     "evalidate"
     ]
 requires-python = ">=3.8"
