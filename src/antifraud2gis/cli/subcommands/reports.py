@@ -5,6 +5,7 @@ from sqlalchemy import select, func, case, desc
 from rich.console import Console
 from rich.table import Table
 from rich import print
+import click
 
 from ...db import DBSession, Session
 from ...models.metric import Metric
@@ -14,6 +15,7 @@ from ...models.author import Author
 from ...aliases import resolve_alias
 from ...metrics import run_metrics, save_metrics, metrics_all, metrics_high, metrics_low
 from ...metrics.fraudreport import FraudReport
+from ...companymetric import CompanyMetric
 from ...logger import logger
 from ...exceptions import AFNoCompany
 
@@ -27,13 +29,16 @@ def reports_fraud(
     ):
     """ analyse fraud metrics """
    
-
     object_id = resolve_alias(oid) if oid and oid.lower() != ':all' else None
     if object_id is None:
         return
     
     with DBSession() as dbsession:
         c = Company.get(object_id, dbsession=dbsession)
+        cm = CompanyMetric(company=c, dbsession=dbsession)
+        
+        if cm.nmetrics() == 0:
+            cm.calculate()
         fr = FraudReport(c, control_region_id=1, dbsession=dbsession)
         fr.dump()
 
@@ -188,42 +193,90 @@ def reports_city(city: str = typer.Option(None, "-c", "--city", help="Process on
             console.print(table)
     
 
-@reports_app.command(name="region")
-def reports_region(region_id: int | None = typer.Argument(None, help="region_id or nothing"),
-                   limit: int | None = typer.Option(None, "-l", help="limit to top N records")):
+
+
+def companies_per_region():
     """ show companies per region """
-    if region_id is None:
-        with DBSession() as dbsession:
-            stmt = (
-                dbsession.query(
-                    Company.region_id,
-                    func.count().label("company_count")
-                )
-                .group_by(Company.region_id)
-                .order_by(desc("company_count"))
+    with DBSession() as dbsession:
+        stmt = (
+            dbsession.query(
+                Company.region_id,
+                func.count().label("company_count")
             )
+            .group_by(Company.region_id)
+            .order_by(desc("company_count"))
+        )
 
-            if limit:
-                stmt = stmt.limit(limit)
+        for region_id, cnt in dbsession.execute(stmt):
+            print(f"region {region_id} : {cnt}")
+    return
 
-            for region_id, cnt in dbsession.execute(stmt):
-                print(f"region {region_id} : {cnt}")
-        return
 
-    # region_id given
+def region_summary(region_id: int):
+    with DBSession() as dbsession:
+
+        total_companies = dbsession.query(Company).filter(Company.region_id == region_id).count()
+        print(f"Total companies in region {region_id}: {total_companies}")
+        error_companies = dbsession.query(Company).filter(Company.region_id == region_id, Company.error.is_not(None)).count()
+        print(f"Companies with errors in region {region_id}: {error_companies}")
+        noerror_companies = dbsession.query(Company).filter(Company.region_id == region_id, Company.error.is_(None)).count()
+        print(f"Companies without errors in region {region_id}: {noerror_companies}")
+        updated_companies = dbsession.query(Company).filter(Company.region_id == region_id, Company.error.is_(None), Company.updated_at.is_not(None)).count()
+        print(f"Companies with updated data in region {region_id}: {updated_companies}")
+
+def companies_in_region(region_id: int):
     with DBSession() as dbsession:
         stmt = (
             dbsession.query(
                 Company.city,
-                func.count().label("company_count")
+                func.count().label("company_count"),
+                func.sum(case((Company.error.is_(None), 1), else_=0)).label("ok_count"),
+                func.sum(case((Company.error.is_not(None), 1), else_=0)).label("error_count"),
+                func.sum(case((Company.updated_at.is_not(None), 1), else_=0)).label("updated"),
             )
             .filter(Company.region_id == region_id)
             .group_by(Company.city)
-            .order_by(desc("company_count"))
+            .order_by(func.count().desc())
         )
 
-        if limit:
-            stmt = stmt.limit(limit)
+        table = Table(title=f"Region {region_id} Summary")
 
-        for city, cnt in dbsession.execute(stmt):
-            print(f"{city:20} {cnt}")
+        table.add_column("City", style="cyan", no_wrap=True)
+        table.add_column("Total", justify="right", style="bold")
+        table.add_column("OK", justify="right", style="green")
+        table.add_column("Error", justify="right", style="red")
+        table.add_column("Loaded", justify="right")
+
+        for city, total, ok_count, error_count, loaded_count in dbsession.execute(stmt):
+            table.add_row(city, str(total), str(ok_count), str(error_count), str(loaded_count))
+        
+        console = Console()
+        console.print(table)
+
+@reports_app.command(name="global")
+def reports_global(report: str | None = typer.Argument("region", 
+                        click_type=click.Choice(["region"]),
+                        help="report type: city or region"),
+                    limit: int | None = typer.Option(None, "-l", help="limit to top N records")):
+    """ show companies per region """
+
+    companies_per_region()
+
+
+
+@reports_app.command(name="region")
+def reports_region(region_id: int = typer.Argument(1, help="region_id"),
+                    report: str | None = typer.Argument("sum", 
+                        click_type=click.Choice(["sum", "summary", "percity"]),
+                        help="report type: city or region"),
+                    limit: int | None = typer.Option(None, "-l", help="limit to top N records")):
+    """ show companies per region """
+
+
+    print("REPORT:", report)
+
+    if report == "percity":
+        companies_in_region(region_id)
+    elif report in ["sum", "summary"]:
+        region_summary(region_id)
+

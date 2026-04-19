@@ -46,6 +46,10 @@ class FraudReport:
         self.metrics_local = self.report(c.region_id, dbsession=dbsession)
         self.metrics_control = self.report(control_region_id, dbsession=dbsession)
 
+
+        print("LOCAL", self.metrics_local)
+        print("CONTROL", self.metrics_control)
+
         # make final metrics, as min between local and control
         self.metrics_final = dict()
         for metric in metrics_all:
@@ -78,7 +82,7 @@ class FraudReport:
 
             m = self.company.get_metric(metric)
             if not m or m.value is None:
-                print(f"#  Metric {metric} not found or has no value")
+                print(f"#  Metric {metric} not found for r{region_id} {self.company.object_id} or has no value")
                 continue
             # print(f"  Metric {metric} = {m.value}")
 

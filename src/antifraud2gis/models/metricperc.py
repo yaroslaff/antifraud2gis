@@ -55,7 +55,7 @@ class MetricPerc(Base):
         for metric in metrics_all:
             for percentile in percentiles_values:
 
-                print(f"calc percentile {percentile} for {metric}")
+                # print(f"calc percentile {percentile} for {metric} r{region_id}...")
 
                 if metric in metrics_high:
                     pval = percentile
@@ -77,7 +77,7 @@ class MetricPerc(Base):
                 p = round(np.percentile(values, pval), 2) if values else None
 
                 if p is None:
-                    print(f"  {metric} {pval}% percentile = N/A (no values)")
+                    print(f"  {metric} {pval}% percentile = N/A (no values in database for r{region_id})")
                     continue
                 print(f"  {metric} {pval}% percentile = {p} from {len(values)} values")
 

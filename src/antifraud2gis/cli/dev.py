@@ -135,6 +135,7 @@ def arg_aliases():
     aa.alias("rml", ["reports", "metriclist"])
     aa.alias("rf", ["reports", "fraud"])
     aa.alias("rr", ["reports", "region"])
+    aa.alias("rg", ["reports", "global"])
 
     aa.alias("x", "extra")
     aa.alias("xta", ["extra", "top-author"])

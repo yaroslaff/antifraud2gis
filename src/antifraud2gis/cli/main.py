@@ -41,6 +41,7 @@ from ..aliases import resolve_alias
 from ..aliases import aliases
 from ..base import Base
 from ..db import DBSession, ScopedDBSession, check_or_create_db
+from ..companymetric import CompanyMetric
 
 
 # CLI
@@ -199,6 +200,9 @@ def info(oid: str):
             print(f"Company {oid} not found: {e}")
             return
         c = dbsession.merge(c)
+        cm = CompanyMetric(c, dbsession=dbsession)
+        print(f"Metrics: {cm.nmetrics()}")
+
         print(c.info())
 
 

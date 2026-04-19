@@ -4,6 +4,7 @@ from ..session import http_session
 import requests
 import time
 import json
+import os
 
 WARN_TIME = 300
 
@@ -17,11 +18,15 @@ class CompanyReviewsIterator:
         self.meta = None
         self._reviews = []
         self.created = time.time()
+        self.verbose = bool(os.getenv('VERBOSE'))
+
 
     def __iter__(self):
         return self
 
     def __next__(self):
+        if self.verbose:
+            print(f"CRI next ({self._reviews} url: {self.url})")
         if not self._reviews and self.url is not None:
             self._load_next_page()
 
@@ -31,6 +36,8 @@ class CompanyReviewsIterator:
         return self._reviews.pop(0)
 
     def _load_next_page(self):
+        if self.verbose:
+            print(f"_load_next_page {self.url}")
 
         if self.pages_loaded and self.sleep:
             print(f"sleep {self.sleep} after {self.pages_loaded}")
@@ -48,6 +55,9 @@ class CompanyReviewsIterator:
                 print("RequestException", e)
                 time.sleep(1)
 
+        if self.verbose:
+            print(f"status: {r.status_code}")
+
         if r.status_code == 400:
             raise NotImplementedError
 
@@ -58,6 +68,7 @@ class CompanyReviewsIterator:
         self.meta = data['meta']
 
         self._reviews = data['reviews']
+        print(f"Loaded {len(self._reviews)} reviews")
         if self._reviews:
             self.pages_loaded += 1
 

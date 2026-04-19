@@ -1,6 +1,7 @@
 from typing import Optional
 
 import json
+import os
 from loguru import logger
 import time
 import fnmatch
@@ -68,7 +69,7 @@ class Company(Base):
     branch_count_2gis: Mapped[int] = mapped_column(Integer, nullable=True)
     rating_2gis: Mapped[float] = mapped_column(Float, nullable=True)
 
-    region_id: Mapped[int] = mapped_column(Integer, nullable=False) # -1 - tmp error code, -2 - no reviews -3 emptyerr (medical)
+    region_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True) # -1 - tmp error code, -2 - no reviews -3 emptyerr (medical)
 
 
     reviews: Mapped[list["Review"]] = relationship(back_populates="company", cascade="all, delete-orphan",
@@ -191,12 +192,13 @@ class Company(Base):
     @classmethod
     def fetch(cls, object_id: str, full=False, notolder: datetime | None = None) -> None:
 
-        
+        verbose = bool(os.getenv("VERBOSE"))
 
 
         from .review import Review
         # dbsession = dbsession or DBSession()
-        # print(f"FETCH {object_id} full: {full} notolder: {notolder} caller: {caller()}")
+        if verbose:
+            print(f"FETCH {object_id} full: {full} notolder: {notolder} caller: {caller()}")
 
         if notolder and notolder.tzinfo is None:    
             notolder = notolder.replace(tzinfo=timezone.utc)
@@ -236,6 +238,8 @@ class Company(Base):
                 oldest_2gis_review_date = None
 
                 for r in cr:
+                    if verbose:
+                        print("R:", r)
                     if meta is None:
                         meta = cr.meta
                         progress_total = meta['total_count']
@@ -244,7 +248,7 @@ class Company(Base):
                     public_id = r['user']['public_id']
 
 
-                    if notolder is not None:
+                    if notolder is not None:                        
                         review_date = dateutil.parser.parse(r['date_created'])
 
                         if oldest_2gis_review_date is None or oldest_2gis_review_date > review_date:
@@ -252,7 +256,8 @@ class Company(Base):
 
 
                         if review_date <= notolder:
-                            # print("skipping review date", review_date, "older than", notolder)
+                            if verbose:
+                                print("skipping review date", review_date, "older than", notolder)
                             notolder_hit = True
                             break
                         #else:
