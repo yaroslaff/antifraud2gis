@@ -1,3 +1,5 @@
+
+
 # Antifraud2GIS
 
 Searching for fake (suspicious) reviews in 2gis.
@@ -8,6 +10,8 @@ This project is absolutely unofficial, not related to 2GIS.ru.
 ~~~
 pipx install git+https://github.com/yaroslaff/antifraud2gis
 ~~~
+
+Requires Python >= 3.8.
 
 ## Basic operations
 
@@ -146,6 +150,3 @@ Console utility shows all high relations between companies, `SHOW_HIT` used to d
 `RISK_MEDIAN` will highlight median number of user reviews if it's under this value. (Bots often has low number of reviews).
 
 Neither `SHOW_HIT` nor `RISK_MEDIAN` do not affect detections, it's used only for displaying information.
-
-
-
