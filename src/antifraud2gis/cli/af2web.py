@@ -68,7 +68,8 @@ def render(request, template_name, context: dict):
         "trusted": last_trusted,
         "untrusted": last_untrusted,
     })
-    return templates.TemplateResponse(template_name, context)
+    # return templates.TemplateResponse(template_name, context)
+    return templates.TemplateResponse(request, template_name, context)
 
 
 @app.get("/", response_class=HTMLResponse)
